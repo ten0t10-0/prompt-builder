@@ -386,13 +386,17 @@ class B_UI_Component_Slider(B_UI_Component):
             , isRequired = bool(int(kwargs.get("is_required", 0)))
             , visible = not bool(int(kwargs.get("hide", 0)))
             , buildButtons = bool(int(kwargs.get("build_buttons", 1)))
+            , promptAButton = kwargs.get("a_button", "")
+            , promptBButton = kwargs.get("b_button", "")
         )
     
-    def __init__(self, name: str = None, promptA: str = "", promptB: str = "", defaultValue: float=None, isRequired: bool=False, visible: bool = True, buildButtons: bool = True):
+    def __init__(self, name: str = None, promptA: str = "", promptB: str = "", defaultValue: float = None, isRequired: bool = False, visible: bool = True, buildButtons: bool = True, promptAButton: str = "", promptBButton: str = ""):
         self.promptA = promptA.strip()
         self.promptB = promptB.strip()
         self.isRequired = isRequired
         self.buildButtons = buildButtons
+        self.promptAButton = promptAButton
+        self.promptBButton = promptBButton
         
         self.isNegativePrompt = False
         
@@ -429,9 +433,10 @@ class B_UI_Component_Slider(B_UI_Component):
             , visible = self.visible
         )
         
-        with gr.Row():
-            self.buildButton(slider, "Male", 0)
-            self.buildButton(slider, "Female", self.getMaximum())
+        if self.buildButtons:
+            with gr.Row():
+                self.buildButton(slider, self.promptAButton, 0)
+                self.buildButton(slider, self.promptBButton, self.getMaximum())
         
         return [
             slider

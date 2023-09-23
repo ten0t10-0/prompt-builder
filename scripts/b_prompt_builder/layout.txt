@@ -1,0 +1,45 @@
+GROUP All --build_reset_button 1
+	TAB SomeTab
+		ACCORDION SomeAccordion
+			TEXTBOX Positive prompt
+			
+			TEXTBOX Negative prompt --is_negative 1 --v promptA, promptB
+		END
+
+		DROPDOWN SomeDropdownA --v ChoiceA, ChoiceB --multi_select 1
+			CHOICE ChoiceA --p promptA
+			CHOICE ChoiceB --p promptB --n promptC
+			CHOICE ChoiceC --n promptC
+		END
+	END
+
+	TAB SomeTaggedTab --x 1 --build_reset_button 0
+		ROW
+			COLUMN --scale 2
+				SLIDER SomethingA - SomethingB --a promptA --b promptB --v 0 --is_required 0 --a_button A --b_button B
+
+				SLIDER SomethingC - SomethingD --a promptC --b promptD --v 100 --is_required 1 --build_buttons 0
+			END
+			
+			COLUMN --scale 1
+				DROPDOWN SomeColorDropdown
+					CHOICES --type COLOR --postfix something
+				END
+
+				DROPDOWN SomeColorMultiDropdown --multi_select 1
+					CHOICES --type COLOR --postfix something
+				END
+
+				DROPDOWN SomeDropdownB --multi_select 1 --sort 0
+					CHOICE SomeSpecialChoice --link_type SLIDER --link_target SomethingA - SomethingB --a promptX --b promptY
+					CHOICE ChoiceA --p promptA
+				END
+			END
+		END
+	END
+END
+.
+
+ignored line
+another ignored line
+etc.

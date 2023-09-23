@@ -1,0 +1,18 @@
+PRESET Some Full Preset
+	SET Positive prompt --v promptA
+	SET SomeDropdownA --v ChoiceB, ChoiceC
+	SET SomeDropdownB --v SomeSpecialChoice
+	SET SomethingA - SomethingB --v 50
+END
+
+PRESET Some Additive Preset --is_additive 1
+	SET Positive prompt --v promptA
+	SET SomeDropdownA --v ChoiceB, ChoiceC
+	SET SomeDropdownB --v SomeSpecialChoice
+	SET SomethingA - SomethingB --v 50
+END
+.
+
+ignored line
+another ignored line
+etc.
