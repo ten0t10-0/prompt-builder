@@ -102,6 +102,10 @@ class B_UI_Component(B_UI, ABC):
     def getUpdate(self, value = None) -> any:
         pass
 
+    @abstractmethod
+    def finalizeComponent(self, componentMap: dict):
+        pass
+
 class B_UI_Container(B_UI):
     @staticmethod
     @abstractmethod
@@ -191,12 +195,33 @@ class B_UI_Container(B_UI):
     def buildContainer(self) -> any:
         pass
 
-class B_Prompt(ABC):
+class B_UI_Preset():
     @staticmethod
-    @abstractmethod
-    def _fromArgs(**kwargs: str):
-        pass
+    def _fromArgs(mappings: dict[str, list[any]], **kwargs: str):
+        return B_UI_Preset(
+            mappings = mappings
+            , isAdditive = bool(int(kwargs.get("is_additive", 0)))
+        )
     
+    def __init__(self, mappings: dict[str, list[any]], isAdditive: bool = False):
+        self.mappings = mappings
+        self.isAdditive = isAdditive
+    
+    def getPresetValue(self, bComponent: B_UI_Component, componentValue):
+        component = bComponent.component
+        
+        hasPresetValue = component.label in self.mappings
+        if not hasPresetValue:
+            return bComponent.defaultValue if not self.isAdditive else componentValue
+        
+        presetValue: any = self.mappings[component.label]
+        
+        if type(component) is not gr.Dropdown or not component.multiselect:
+            presetValue = bComponent.defaultValue if len(presetValue) == 0 else presetValue[0]
+        
+        return presetValue
+
+class B_Prompt(ABC):
     def __init__(self):
         pass
     
@@ -210,9 +235,10 @@ class B_Prompt(ABC):
 
 class B_Prompt_Simple(B_Prompt):
     @staticmethod
-    def _fromArgs(**kwargs: str):
+    def _fromArgs(preset: B_UI_Preset, **kwargs: str):
         return B_Prompt_Simple(
-            promptPositive = kwargs.get("p", "")
+            preset = preset
+            , promptPositive = kwargs.get("p", "")
             , promptNegative = kwargs.get("n", "")
         )
     
@@ -220,9 +246,12 @@ class B_Prompt_Simple(B_Prompt):
     def _createEmpty():
         return B_Prompt_Simple("", "")
     
-    def __init__(self, promptPositive: str = "", promptNegative: str = ""):
+    def __init__(self, promptPositive: str = "", promptNegative: str = "", preset: B_UI_Preset = None):
         self.positive = promptPositive
         self.negative = promptNegative
+        self.preset = preset
+
+        super().__init__()
     
     def getPositive(self, componentMap: dict[str, B_UI_Component]) -> str:
         return self.positive
@@ -245,6 +274,8 @@ class B_Prompt_Link_Slider(B_Prompt):
         self.promptB = promptB
         
         self.isNegativePrompt = False
+        
+        super().__init__()
     
     def buildPrompt(self, componentMap: dict[str, B_UI_Component]) -> str:
         component = componentMap.get(self.linkedKey)
@@ -312,6 +343,9 @@ class B_UI_Component_Textbox(B_UI_Component):
     
     def getUpdate(self, value = None) -> any:
         return gr.Textbox.update(value = self.handleUpdateValue(value))
+    
+    def finalizeComponent(self, componentMap: dict):
+        pass
 
 class B_UI_Component_Dropdown(B_UI_Component):
     @staticmethod
@@ -475,6 +509,45 @@ class B_UI_Component_Dropdown(B_UI_Component):
     
     def getUpdate(self, value = None) -> any:
         return gr.Dropdown.update(value = self.handleUpdateValue(value))
+    
+    def finalizeComponent(self, componentMap: dict):
+        bComponents: list[B_UI_Component] = componentMap.values()
+        components: list[any] = list(map(lambda bComponent: bComponent.component, bComponents))
+
+        anyChoiceMapHasPreset = any(
+            map(
+                lambda bPrompt: False if type(bPrompt) is not B_Prompt_Simple else bPrompt.preset is not None and len(bPrompt.preset.mappings) > 0
+                , self.choicesMap.values()
+            )
+        )
+        if anyChoiceMapHasPreset:
+            def getPresetValues(choice: str | list[str], *args):
+                if type(choice) is str:
+                    choice = [choice]
+                
+                if len(choice) == 0:
+                    return list(args)
+
+                bPrompt = self.choicesMap[choice[0]]
+                
+                if not issubclass(type(bPrompt), B_Prompt_Simple) or bPrompt.preset == None:
+                    return list(args)
+                
+                bPrompt: B_Prompt_Simple = bPrompt
+                updatedValues: list[any] = []
+                
+                i = 0
+                for bComponent in bComponents:
+                    updatedValues.append(bPrompt.preset.getPresetValue(bComponent, args[i]))
+                    i += 1
+                
+                return updatedValues
+            
+            self.component.select(
+                fn = getPresetValues
+                , inputs = [self.component] + components
+                , outputs = components
+            )
 
 class B_UI_Component_Slider(B_UI_Component):
     @staticmethod
@@ -557,6 +630,9 @@ class B_UI_Component_Slider(B_UI_Component):
     
     def getUpdate(self, value = None) -> any:
         return gr.Slider.update(value = self.handleUpdateValue(value))
+    
+    def finalizeComponent(self, componentMap: dict):
+        pass
 
 class B_UI_Container_Tab(B_UI_Container):
     @staticmethod
@@ -656,18 +732,6 @@ class B_UI_Container_Accordion(B_UI_Container):
     def buildContainer(self) -> any:
         return gr.Accordion(label = self.name, visible = self.visible)
 
-class B_UI_Preset():
-    @staticmethod
-    def _fromArgs(mappings: dict[str, list[any]], **kwargs: str):
-        return B_UI_Preset(
-            mappings = mappings
-            , isAdditive = bool(int(kwargs.get("is_additive", 0)))
-        )
-    
-    def __init__(self, mappings: dict[str, list[any]], isAdditive: bool = False):
-        self.mappings = mappings
-        self.isAdditive = isAdditive
-
 class B_UI_Builder(ABC):
     def __init__(self, name: str, **kwargs: str):
         self.name = name
@@ -686,6 +750,25 @@ class B_UI_Builder_WithChildren(B_UI_Builder):
     @abstractmethod
     def build(self) -> B_UI:
         pass
+
+class B_UI_Preset_Builder(B_UI_Builder):
+    def __init__(self, name: str, **kwargs: str):
+        self.mappings: dict[str, list[str]] = {}
+        
+        super().__init__(name, **kwargs)
+    
+    def addMapping(self, name: str, **kwargs: str):
+        value = kwargs.get("v", "")
+        
+        if len(value) > 0:
+            value = list(map(lambda v: v.strip(), value.split(",")))
+        else:
+            value = list[str]([])
+        
+        self.mappings[name] = value
+    
+    def build(self) -> B_UI_Preset:
+        return None if len(self.mappings) == 0 else B_UI_Preset._fromArgs(self.mappings, **self.args)
 
 class B_UI_Container_Builder(B_UI_Builder_WithChildren):
     def __init__(self, t: type[B_UI_Container], name: str, parent: B_UI_Builder_WithChildren, **kwargs: str):
@@ -726,7 +809,7 @@ class B_UI_Component_Dropdown_Builder(B_UI_Builder):
         
         super().__init__(name, **kwargs)
     
-    def addChoice(self, text: str, **kwargs: str):
+    def addChoice(self, text: str, preset_builder: B_UI_Preset_Builder, **kwargs: str):
         bPrompt: B_Prompt = None
         
         link_type = kwargs.get("link_type", "")
@@ -734,7 +817,8 @@ class B_UI_Component_Dropdown_Builder(B_UI_Builder):
             case "SLIDER":
                 bPrompt = B_Prompt_Link_Slider._fromArgs(**kwargs)
             case _:
-                bPrompt = B_Prompt_Simple._fromArgs(**kwargs)
+                preset = preset_builder.build()
+                bPrompt = B_Prompt_Simple._fromArgs(preset, **kwargs)
         
         self.choicesMap[text] = bPrompt
     
@@ -757,25 +841,6 @@ class B_UI_Component_Dropdown_Builder(B_UI_Builder):
             self.parent.builtChildren.append(builtSelf)
         
         return builtSelf
-
-class B_UI_Preset_Builder(B_UI_Builder):
-    def __init__(self, name: str, **kwargs: str):
-        self.mappings: dict[str, list[str]] = {}
-        
-        super().__init__(name, **kwargs)
-    
-    def addMapping(self, name: str, **kwargs: str):
-        value = kwargs.get("v", "")
-        
-        if len(value) > 0:
-            value = list(map(lambda v: v.strip(), value.split(",")))
-        else:
-            value = list[str]([])
-        
-        self.mappings[name] = value
-    
-    def build(self) -> B_UI_Preset:
-        return B_UI_Preset._fromArgs(self.mappings, **self.args)
 
 class B_UI_Map():
     def __init__(self, path_base: str, file_name_layout: str, file_name_presets: str, tagged_show: bool = True):
@@ -820,6 +885,7 @@ class B_UI_Map():
         
         builder_current_container: B_UI_Container_Builder = None
         builder_current_dropdown: B_UI_Component_Dropdown_Builder = None
+        dropdown_current_choice: tuple[str, B_UI_Preset_Builder, dict[str, str]] = None
         
         skip = 0
         
@@ -828,6 +894,14 @@ class B_UI_Map():
             if builder.parent is None:
                 layout.append(built)
             return built
+        
+        def _buildDropdownChoice(dropdown_choice: tuple[str, B_UI_Preset_Builder, dict[str, str]]) -> bool:
+            if dropdown_choice is not None:
+                l_choice_name, l_choice_preset_builder, l_choice_args = dropdown_choice
+                builder_current_dropdown.addChoice(l_choice_name, l_choice_preset_builder, **l_choice_args)
+                return len(l_choice_preset_builder.mappings) > 0
+            
+            return False
         
         with open(file_path_layout) as file_layout:
             for l in file_layout:
@@ -840,15 +914,22 @@ class B_UI_Map():
                     break
                 
                 if l_type == "END":
-                    if skip == 0 and builder_current_dropdown is not None:
-                        built = _build(builder_current_dropdown)
-                        builder_current_dropdown = None
-                        continue
-                    
-                    if skip == 0 and builder_current_container is not None:
-                        built = _build(builder_current_container)
-                        builder_current_container = builder_current_container.parent
-                        continue
+                    if skip == 0:
+                        if dropdown_current_choice is not None:
+                            had_mappings = _buildDropdownChoice(dropdown_current_choice)
+                            dropdown_current_choice = None
+                            if had_mappings:
+                                continue
+
+                        if builder_current_dropdown is not None:
+                            built = _build(builder_current_dropdown)
+                            builder_current_dropdown = None
+                            continue
+                        
+                        if builder_current_container is not None:
+                            built = _build(builder_current_container)
+                            builder_current_container = builder_current_container.parent
+                            continue
                     
                     skip -= 1
                     
@@ -877,7 +958,12 @@ class B_UI_Map():
                         if skip > 0:
                             continue
                         
-                        builder_current_dropdown.addChoice(l_name, **l_args)
+                        _buildDropdownChoice(dropdown_current_choice)
+                        
+                        dropdown_current_choice = (l_name, B_UI_Preset_Builder(l_name, **{ "is_additive": "1" }), l_args)
+                    
+                    case "SET":
+                        dropdown_current_choice[1].addMapping(l_name, **l_args)
                     
                     case "CHOICES":
                         if skip > 0:
@@ -997,35 +1083,28 @@ class B_UI_Map():
             if len(item_ui) > 0:
                 components += item_ui
         
-        self.buildPresetsUI(components)
+        self.buildPresetsUI()
+
+        for bComponent in self.componentMap.values():
+            bComponent.finalizeComponent(self.componentMap)
         
         return components
     
-    def buildPresetsUI(self, components: list[any]):
-        presetKeys = self.presets.keys()
-        
-        if len(presetKeys) == 0:
+    def buildPresetsUI(self):
+        if len(self.presets) == 0:
             return
+        
+        bComponents = self.componentMap.values()
+        components: list[any] = list(map(lambda bComponent: bComponent.component, bComponents))
+        
+        presetKeys = self.presets.keys()
         
         def applyPreset(presetKey: str, *args):
             preset = self.presets[presetKey]
-            
-            def getValue(component, componentValue):
-                hasPresetValue = component.label in preset.mappings
-                if not hasPresetValue:
-                    return self.componentMap[component.label].defaultValue if not preset.isAdditive else componentValue
-                
-                presetValue: any = preset.mappings[component.label]
-                
-                if type(component) is not gr.Dropdown or not component.multiselect:
-                    presetValue = presetValue[0]
-                
-                return presetValue
-            
-            return list(map(getValue, components, args))
+            return list(map(preset.getPresetValue, bComponents, args))
         
         B_UI._buildSeparator()
-        with gr.Accordion("Presets", open = True):
+        with gr.Accordion("Presets", open = False):
             i = 0
             for presetKey in presetKeys:
                 button_preset = gr.Button(presetKey)
