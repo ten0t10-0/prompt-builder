@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from modules import scripts
 from modules.processing import StableDiffusionProcessing, process_images
 
-def addPrompt(promptExisting: str, promptToAdd: str):
+def addPrompt(promptExisting: str, promptToAdd: str) -> str:
     if len(promptToAdd) > 0:
         if len(promptExisting) > 0:
             promptExisting += ", " + promptToAdd
@@ -15,7 +15,7 @@ def addPrompt(promptExisting: str, promptToAdd: str):
     
     return promptExisting
 
-def buildRangePrompt(promptA: str, promptB: str, value: float):
+def buildRangePrompt(promptA: str, promptB: str, value: float) -> str:
     if len(promptA) == 0 or len(promptB) == 0:
         return ""
     
@@ -29,81 +29,6 @@ def buildRangePrompt(promptA: str, promptB: str, value: float):
         return promptB
         
     return f"[{promptB}:{promptA}:{value}]"
-
-class B_Prompt(ABC):
-    def __init__(self):
-        pass
-    
-    @abstractmethod
-    def getPositive(self, componentMap: dict):
-        pass
-    
-    @abstractmethod
-    def getNegative(self, componentMap: dict):
-        pass
-
-class B_Prompt_Simple(B_Prompt):
-    @staticmethod
-    def _fromArgs(**kwargs):
-        return B_Prompt_Simple(
-            promptPositive = kwargs.get("p", "")
-            , promptNegative = kwargs.get("n", "")
-        )
-    
-    @staticmethod
-    def _createEmpty():
-        return B_Prompt_Simple("", "")
-    
-    def __init__(self, promptPositive: str="", promptNegative: str=""):
-        self.positive = promptPositive
-        self.negative = promptNegative
-    
-    def getPositive(self, componentMap: dict):
-        return self.positive
-    
-    def getNegative(self, componentMap: dict):
-        return self.negative
-
-class B_Prompt_Link_Slider(B_Prompt):
-    @staticmethod
-    def _fromArgs(**kwargs):
-        return B_Prompt_Link_Slider(
-            linkedKey = kwargs["link_target"]
-            , promptA = kwargs["a"]
-            , promptB = kwargs["b"]
-        )
-    
-    def __init__(self, linkedKey: str, promptA: str, promptB: str):
-        self.linkedKey = linkedKey
-        self.promptA = promptA
-        self.promptB = promptB
-        
-        self.isNegativePrompt = False
-    
-    def buildPrompt(self, componentMap: dict):
-        component = componentMap.get(self.linkedKey)
-        
-        if component is None:
-            print(f"B_Prompt_Link_Slider: Invalid key - '{self.linkedKey}'")
-            return ""
-        
-        if type(component) is not B_UI_Component_Slider:
-            print(f"B_Prompt_Link_Slider: Linked entry is not a slider - '{self.linkedKey}'")
-            return ""
-        
-        return buildRangePrompt(self.promptA, self.promptB, component.value)
-    
-    def getPositive(self, componentMap: dict):
-        if self.isNegativePrompt:
-            return ""
-        
-        return self.buildPrompt(componentMap)
-    
-    def getNegative(self, componentMap: dict):
-        if not self.isNegativePrompt:
-            return ""
-        
-        return self.buildPrompt(componentMap)
 
 class B_UI(ABC):
     _identifier: int = 0
@@ -121,7 +46,7 @@ class B_UI(ABC):
         B_UI._identifier += 1
         return B_UI._identifier
     
-    def handleName(self, name: str = None):
+    def handleName(self, name: str = None) -> str:
         if name is None:
             name = f"{self.identifier}_{self.getDefaultName()}"
         
@@ -132,10 +57,15 @@ class B_UI(ABC):
         pass
     
     @abstractmethod
-    def buildUI(self):
+    def buildUI(self) -> any:
         pass
 
 class B_UI_Component(B_UI, ABC):
+    @staticmethod
+    @abstractmethod
+    def _fromArgs(name: str, *args, **kwargs: str):
+        pass
+    
     def __init__(self, name: str = None, defaultValue = None, visible: bool = True):
         self.value = defaultValue
         self.defaultValue = defaultValue
@@ -147,7 +77,7 @@ class B_UI_Component(B_UI, ABC):
     def handleUpdateValue(self, value):
         return value if value is not None else self.defaultValue
     
-    def buildUI(self):
+    def buildUI(self) -> any:
         component = self.buildComponent()
         self.component = component[0]
         return component
@@ -157,7 +87,7 @@ class B_UI_Component(B_UI, ABC):
         pass
     
     @abstractmethod
-    def buildComponent(self):
+    def buildComponent(self) -> list[any]:
         pass
     
     @abstractmethod
@@ -169,12 +99,181 @@ class B_UI_Component(B_UI, ABC):
         pass
     
     @abstractmethod
-    def getUpdate(self, value = None):
+    def getUpdate(self, value = None) -> any:
         pass
+
+class B_UI_Container(B_UI):
+    @staticmethod
+    @abstractmethod
+    def _fromArgs(name: str, items: list[B_UI], **kwargs: str):
+        pass
+
+    def __init__(self, name: str = None, items: list[B_UI] = [], visible: bool = True, buildResetButton: bool = False, buildCustomPromptInputs: bool = False):
+        self.items = self.handleItems(items, buildCustomPromptInputs, name)
+        self.buildResetButton = buildResetButton
+        
+        super().__init__(name, visible)
+    
+    def handleItems(self, items: list[B_UI], buildCustomPromptInputs: bool, prefix: str) -> list[B_UI]:
+        if buildCustomPromptInputs:
+            items.append(B_UI_Component_Textbox(f"{prefix} - Positive prompt"))
+            items.append(B_UI_Component_Textbox(f"{prefix} - Negative prompt", isNegativePrompt = True))
+        
+        return items
+    
+    def getBComponents(self) -> list[B_UI_Component]:
+        bComponents: list[B_UI_Component] = []
+        
+        for item in self.items:
+            item_type = type(item)
+            
+            if issubclass(item_type, B_UI_Component):
+                bComponents.append(item)
+                continue
+            
+            if issubclass(item_type, B_UI_Container):
+                bComponents += item.getBComponents()
+                continue
+        
+        return bComponents
+    
+    def buildComponents(self) -> list[any]:
+        components = []
+        
+        for item in self.items:
+            item_ui = item.buildUI()
+            
+            if len(item_ui) > 0:
+                components += item_ui
+        
+        if self.buildResetButton:
+            B_UI._buildSeparator()
+            btnReset = self.buildButton_Reset(components)
+        
+        return components
+    
+    def resetComponentsValues(self, *args) -> any:
+        updates = []
+        
+        bComponents = self.getBComponents()
+        for x in bComponents:
+            updates.append(x.getUpdate())
+        
+        if len(updates) == 1:
+            updates = updates[0]
+        
+        return updates
+    
+    def buildButton_Reset(self, components: list[any]) -> any:
+        btnReset = gr.Button(value = f"Reset {self.name}")
+        
+        btnReset.click(
+            fn = self.resetComponentsValues
+            , inputs = components
+            , outputs = components
+        )
+        
+        return btnReset
+    
+    def buildUI(self) -> any:
+        components = []
+        
+        with self.buildContainer():
+            components = self.buildComponents()
+        
+        return components
+    
+    @abstractmethod
+    def getDefaultName(self) -> str:
+        pass
+    
+    @abstractmethod
+    def buildContainer(self) -> any:
+        pass
+
+class B_Prompt(ABC):
+    @staticmethod
+    @abstractmethod
+    def _fromArgs(**kwargs: str):
+        pass
+    
+    def __init__(self):
+        pass
+    
+    @abstractmethod
+    def getPositive(self, componentMap: dict[str, B_UI_Component]) -> str:
+        pass
+    
+    @abstractmethod
+    def getNegative(self, componentMap: dict[str, B_UI_Component]) -> str:
+        pass
+
+class B_Prompt_Simple(B_Prompt):
+    @staticmethod
+    def _fromArgs(**kwargs: str):
+        return B_Prompt_Simple(
+            promptPositive = kwargs.get("p", "")
+            , promptNegative = kwargs.get("n", "")
+        )
+    
+    @staticmethod
+    def _createEmpty():
+        return B_Prompt_Simple("", "")
+    
+    def __init__(self, promptPositive: str = "", promptNegative: str = ""):
+        self.positive = promptPositive
+        self.negative = promptNegative
+    
+    def getPositive(self, componentMap: dict[str, B_UI_Component]) -> str:
+        return self.positive
+    
+    def getNegative(self, componentMap: dict[str, B_UI_Component]) -> str:
+        return self.negative
+
+class B_Prompt_Link_Slider(B_Prompt):
+    @staticmethod
+    def _fromArgs(**kwargs: str):
+        return B_Prompt_Link_Slider(
+            linkedKey = kwargs["link_target"]
+            , promptA = kwargs["a"]
+            , promptB = kwargs["b"]
+        )
+    
+    def __init__(self, linkedKey: str, promptA: str, promptB: str):
+        self.linkedKey = linkedKey
+        self.promptA = promptA
+        self.promptB = promptB
+        
+        self.isNegativePrompt = False
+    
+    def buildPrompt(self, componentMap: dict[str, B_UI_Component]) -> str:
+        component = componentMap.get(self.linkedKey)
+        
+        if component is None:
+            print(f"B_Prompt_Link_Slider: Invalid key - '{self.linkedKey}'")
+            return ""
+        
+        if type(component) is not B_UI_Component_Slider:
+            print(f"B_Prompt_Link_Slider: Linked entry is not a slider - '{self.linkedKey}'")
+            return ""
+        
+        return buildRangePrompt(self.promptA, self.promptB, component.value)
+    
+    def getPositive(self, componentMap: dict[str, B_UI_Component]) -> str:
+        if self.isNegativePrompt:
+            return ""
+        
+        return self.buildPrompt(componentMap)
+    
+    def getNegative(self, componentMap: dict[str, B_UI_Component]) -> str:
+        if not self.isNegativePrompt:
+            return ""
+        
+        return self.buildPrompt(componentMap)
 
 class B_UI_Component_Textbox(B_UI_Component):
     @staticmethod
-    def _fromArgs(name: str, **kwargs):
+    def _fromArgs(name: str, *args, **kwargs: str):
         return B_UI_Component_Textbox(
             name = name
             , defaultValue = kwargs.get("v", "")
@@ -192,7 +291,7 @@ class B_UI_Component_Textbox(B_UI_Component):
     def getDefaultName(self) -> str:
         return "Textbox"
     
-    def buildComponent(self):
+    def buildComponent(self) -> list[any]:
         return [
             gr.Textbox(
                 label = self.name
@@ -205,20 +304,22 @@ class B_UI_Component_Textbox(B_UI_Component):
     def setValue(self, value):
         self.value = value.strip()
     
-    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
+    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict[str, B_UI_Component]):
         if not self.isNegativePrompt:
             p.prompt = addPrompt(p.prompt, self.value)
         else:
             p.negative_prompt = addPrompt(p.negative_prompt, self.value)
     
-    def getUpdate(self, value = None):
+    def getUpdate(self, value = None) -> any:
         return gr.Textbox.update(value = self.handleUpdateValue(value))
 
 class B_UI_Component_Dropdown(B_UI_Component):
     @staticmethod
-    def _fromArgs(name: str, choicesMap: dict[str, B_Prompt], **kwargs):
-        defaultValues = kwargs.get("v", None)
-        if defaultValues is not None:
+    def _fromArgs(name: str, *args, **kwargs: str):
+        choicesMap: dict[str, B_Prompt] = args[0]
+
+        defaultValues = kwargs.get("v", "")
+        if len(defaultValues) > 0:
             defaultValues = list(map(lambda v: v.strip(), defaultValues.split(",")))
         
         return B_UI_Component_Dropdown(
@@ -234,7 +335,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
         )
     
     @staticmethod
-    def _buildColorChoicesMap(postfixPrompt: str = ""):
+    def _buildColorChoicesMap(postfixPrompt: str = "") -> dict[str, B_Prompt_Simple]:
         postfixPrompt = postfixPrompt.strip()
         
         if len(postfixPrompt) > 0:
@@ -261,7 +362,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
     def __init__(
         self
         , name: str = None
-        , choicesMap: dict = {}
+        , choicesMap: dict[str, B_Prompt] = {}
         , defaultValues: str | list[str] = None
         , multiselect: bool = False
         , allowCustomValues: bool = True
@@ -279,7 +380,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
         
         super().__init__(name, self.buildDefaultValue(choicesMap, defaultValues), visible)
     
-    def buildChoicesMap(self, choicesMap: dict, insertEmptyChoice: bool):
+    def buildChoicesMap(self, choicesMap: dict[str, B_Prompt], insertEmptyChoice: bool) -> dict[str, B_Prompt]:
         choicesMapFinal = choicesMap
         
         if insertEmptyChoice:
@@ -291,8 +392,8 @@ class B_UI_Component_Dropdown(B_UI_Component):
         
         return choicesMapFinal
     
-    def buildDefaultValue(self, choicesMap: dict, defaultValues: str | list[str]):
-        defaultValue = None if not self.multiselect else []
+    def buildDefaultValue(self, choicesMap: dict[str, B_Prompt], defaultValues: str | list[str]) -> str | list[str]:
+        defaultValue: str | list[str] = None if not self.multiselect else []
         
         if (type(defaultValues) is str or defaultValues is None):
             defaultValues = [defaultValues]
@@ -314,13 +415,13 @@ class B_UI_Component_Dropdown(B_UI_Component):
         
         return defaultValue
     
-    def getChoices(self):
+    def getChoices(self) -> list[str]:
         choices = list(self.choicesMap)
         
         if not self.sortChoices:
             return choices
         
-        choicesSorted = []
+        choicesSorted: list[str] = []
         
         if choices[0] == "-":
             choicesSorted.append(choices.pop(0))
@@ -330,8 +431,8 @@ class B_UI_Component_Dropdown(B_UI_Component):
         
         return choicesSorted
     
-    def getBPromptsFromValue(self):
-        bPrompts = []
+    def getBPromptsFromValue(self) -> list[B_Prompt]:
+        bPrompts: list[B_Prompt] = []
         
         if type(self.value) is str:
             bPrompts.append(self.choicesMap.get(self.value, None if not self.allowCustomValues else B_Prompt_Simple(self.value)))
@@ -347,7 +448,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
     def getDefaultName(self) -> str:
         return "Dropdown"
     
-    def buildComponent(self):
+    def buildComponent(self) -> list[any]:
         return [
             gr.Dropdown(
                 label = self.name
@@ -364,7 +465,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
     def setValue(self, value):
         self.value = value
     
-    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
+    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict[str, B_UI_Component]):
         bPrompts = self.getBPromptsFromValue()
         if len(bPrompts) > 0:
             for bPrompt in bPrompts:
@@ -372,12 +473,12 @@ class B_UI_Component_Dropdown(B_UI_Component):
                     p.prompt = addPrompt(p.prompt, bPrompt.getPositive(componentMap))
                     p.negative_prompt = addPrompt(p.negative_prompt, bPrompt.getNegative(componentMap))
     
-    def getUpdate(self, value = None):
+    def getUpdate(self, value = None) -> any:
         return gr.Dropdown.update(value = self.handleUpdateValue(value))
 
 class B_UI_Component_Slider(B_UI_Component):
     @staticmethod
-    def _fromArgs(name: str, **kwargs):
+    def _fromArgs(name: str, *args, **kwargs: str):
         return B_UI_Component_Slider(
             name = name
             , promptA = kwargs.get("a", "")
@@ -402,16 +503,16 @@ class B_UI_Component_Slider(B_UI_Component):
         
         super().__init__(name, defaultValue, visible)
     
-    def getMinimum(self):
+    def getMinimum(self) -> float:
         return -1 if not self.isRequired else 0
     
-    def getMaximum(self):
+    def getMaximum(self) -> float:
         return 100
     
-    def getStep(self):
+    def getStep(self) -> float:
         return 1
     
-    def buildButton(self, component, text: str, value: float):
+    def buildButton(self, component: any, text: str, value: float) -> any:
         btn = gr.Button(value = text)
         btn.click(
             fn = lambda component: self.getUpdate(value)
@@ -423,7 +524,7 @@ class B_UI_Component_Slider(B_UI_Component):
     def getDefaultName(self) -> str:
         return "Slider"
     
-    def buildComponent(self):
+    def buildComponent(self) -> list[any]:
         slider = gr.Slider(
             label = self.name
             , minimum = self.getMinimum()
@@ -442,11 +543,11 @@ class B_UI_Component_Slider(B_UI_Component):
             slider
         ]
     
-    def setValue(self, value):
+    def setValue(self, value: any):
         value = float(value)
         self.value = round(value / self.getMaximum(), 2) if value > -1 else value
     
-    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
+    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict[str, B_UI_Component]):
         promptToAdd = buildRangePrompt(self.promptA, self.promptB, self.value)
         
         if not self.isNegativePrompt:
@@ -454,96 +555,12 @@ class B_UI_Component_Slider(B_UI_Component):
         else:
             p.negative_prompt = addPrompt(p.prompt, promptToAdd)
     
-    def getUpdate(self, value = None):
+    def getUpdate(self, value = None) -> any:
         return gr.Slider.update(value = self.handleUpdateValue(value))
-
-class B_UI_Container(B_UI):
-    def __init__(self, name: str = None, items: list[B_UI] = [], visible: bool = True, buildResetButton: bool = False, buildCustomPromptInputs: bool = False):
-        self.items = self.handleItems(items, buildCustomPromptInputs, name)
-        self.buildResetButton = buildResetButton
-        
-        super().__init__(name, visible)
-    
-    def handleItems(self, items: list[B_UI], buildCustomPromptInputs: bool, prefix: str):
-        if buildCustomPromptInputs:
-            items.append(B_UI_Component_Textbox(f"{prefix} - Positive prompt"))
-            items.append(B_UI_Component_Textbox(f"{prefix} - Negative prompt", isNegativePrompt = True))
-        
-        return items
-    
-    def getBComponents(self) -> list[B_UI_Component]:
-        bComponents: list[B_UI_Component] = []
-        
-        for item in self.items:
-            item_type = type(item)
-            
-            if issubclass(item_type, B_UI_Component):
-                bComponents.append(item)
-                continue
-            
-            if issubclass(item_type, B_UI_Container):
-                bComponents += item.getBComponents()
-                continue
-        
-        return bComponents
-    
-    def buildComponents(self):
-        components = []
-        
-        for item in self.items:
-            item_ui = item.buildUI()
-            
-            if len(item_ui) > 0:
-                components += item_ui
-        
-        if self.buildResetButton:
-            B_UI._buildSeparator()
-            btnReset = self.buildButton_Reset(components)
-        
-        return components
-    
-    def resetComponentsValues(self, *args):
-        updates = []
-        
-        bComponents = self.getBComponents()
-        for x in bComponents:
-            updates.append(x.getUpdate())
-        
-        if len(updates) == 1:
-            updates = updates[0]
-        
-        return updates
-    
-    def buildButton_Reset(self, components: list):
-        btnReset = gr.Button(value = f"Reset {self.name}")
-        
-        btnReset.click(
-            fn = self.resetComponentsValues
-            , inputs = components
-            , outputs = components
-        )
-        
-        return btnReset
-    
-    def buildUI(self):
-        components = []
-        
-        with self.buildContainer():
-            components = self.buildComponents()
-        
-        return components
-    
-    @abstractmethod
-    def getDefaultName(self) -> str:
-        pass
-    
-    @abstractmethod
-    def buildContainer(self):
-        pass
 
 class B_UI_Container_Tab(B_UI_Container):
     @staticmethod
-    def _fromArgs(name: str, items: list[B_UI], **kwargs):
+    def _fromArgs(name: str, items: list[B_UI], **kwargs: str):
         return B_UI_Container_Tab(
             name = name
             , items = items
@@ -557,12 +574,12 @@ class B_UI_Container_Tab(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Tab"
     
-    def buildContainer(self):
+    def buildContainer(self) -> any:
         return gr.Tab(self.name)
 
 class B_UI_Container_Row(B_UI_Container):
     @staticmethod
-    def _fromArgs(name: str, items: list[B_UI], **kwargs):
+    def _fromArgs(name: str, items: list[B_UI], **kwargs: str):
         return B_UI_Container_Row(
             items = items
             , visible = not bool(int(kwargs.get("hide", 0)))
@@ -576,12 +593,12 @@ class B_UI_Container_Row(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Row"
     
-    def buildContainer(self):
+    def buildContainer(self) -> any:
         return gr.Row(visible = self.visible)
 
 class B_UI_Container_Column(B_UI_Container):
     @staticmethod
-    def _fromArgs(name: str, items: list[B_UI], **kwargs):
+    def _fromArgs(name: str, items: list[B_UI], **kwargs: str):
         return B_UI_Container_Column(
             items = items
             , scale = int(kwargs.get("scale", 1))
@@ -598,12 +615,12 @@ class B_UI_Container_Column(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Column"
     
-    def buildContainer(self):
+    def buildContainer(self) -> any:
         return gr.Column(scale = self.scale, visible = self.visible)
 
 class B_UI_Container_Group(B_UI_Container):
     @staticmethod
-    def _fromArgs(name: str, items: list[B_UI], **kwargs):
+    def _fromArgs(name: str, items: list[B_UI], **kwargs: str):
         return B_UI_Container_Group(
             items = items
             , visible = not bool(int(kwargs.get("hide", 0)))
@@ -617,12 +634,12 @@ class B_UI_Container_Group(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Group"
     
-    def buildContainer(self):
+    def buildContainer(self) -> any:
         return gr.Group(visible = self.visible)
 
 class B_UI_Container_Accordion(B_UI_Container):
     @staticmethod
-    def _fromArgs(name: str, items: list[B_UI], **kwargs):
+    def _fromArgs(name: str, items: list[B_UI], **kwargs: str):
         return B_UI_Container_Accordion(
             items = items
             , visible = not bool(int(kwargs.get("hide", 0)))
@@ -636,23 +653,23 @@ class B_UI_Container_Accordion(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Accordion"
     
-    def buildContainer(self):
+    def buildContainer(self) -> any:
         return gr.Accordion(label = self.name, visible = self.visible)
 
 class B_UI_Preset():
     @staticmethod
-    def _fromArgs(mappings: dict[str, list], **kwargs):
+    def _fromArgs(mappings: dict[str, list[any]], **kwargs: str):
         return B_UI_Preset(
             mappings = mappings
             , isAdditive = bool(int(kwargs.get("is_additive", 0)))
         )
     
-    def __init__(self, mappings: dict[str, list], isAdditive: bool = False):
+    def __init__(self, mappings: dict[str, list[any]], isAdditive: bool = False):
         self.mappings = mappings
         self.isAdditive = isAdditive
 
 class B_UI_Builder(ABC):
-    def __init__(self, name: str, **kwargs):
+    def __init__(self, name: str, **kwargs: str):
         self.name = name
         self.args = kwargs
     
@@ -660,9 +677,9 @@ class B_UI_Builder(ABC):
     def build(self) -> B_UI | B_UI_Preset:
         pass
 
-class B_UI_Builder_WithParent(B_UI_Builder):
-    def __init__(self, name: str, parent: B_UI_Builder, **kwargs):
-        self.parent = parent
+class B_UI_Builder_WithChildren(B_UI_Builder):
+    def __init__(self, name: str, **kwargs: str):
+        self.builtChildren: list[B_UI] = []
         
         super().__init__(name, **kwargs)
     
@@ -670,13 +687,12 @@ class B_UI_Builder_WithParent(B_UI_Builder):
     def build(self) -> B_UI:
         pass
 
-class B_UI_Container_Builder(B_UI_Builder_WithParent):
-    def __init__(self, t: type[B_UI_Container], name: str, parent: B_UI_Builder, **kwargs):
+class B_UI_Container_Builder(B_UI_Builder_WithChildren):
+    def __init__(self, t: type[B_UI_Container], name: str, parent: B_UI_Builder_WithChildren, **kwargs: str):
         self.t = t
+        self.parent = parent
         
-        self.builtChildren: list[B_UI] = []
-        
-        super().__init__(name, parent, **kwargs)
+        super().__init__(name, **kwargs)
     
     def finalizeBuilt(self, built: B_UI):
         if self.parent is not None:
@@ -687,11 +703,12 @@ class B_UI_Container_Builder(B_UI_Builder_WithParent):
     def build(self) -> B_UI:
         return self.finalizeBuilt(self.t._fromArgs(self.name, self.builtChildren, **self.args))
 
-class B_UI_Component_Builder(B_UI_Builder_WithParent):
-    def __init__(self, t: type[B_UI_Component], name: str, parent: B_UI_Container_Builder, **kwargs):
+class B_UI_Component_Builder(B_UI_Builder):
+    def __init__(self, t: type[B_UI_Component], name: str, parent: B_UI_Container_Builder, **kwargs: str):
         self.t = t
+        self.parent = parent
         
-        super().__init__(name, parent, **kwargs)
+        super().__init__(name, **kwargs)
     
     def build(self) -> B_UI:
         builtSelf = self.t._fromArgs(self.name, **self.args)
@@ -701,16 +718,18 @@ class B_UI_Component_Builder(B_UI_Builder_WithParent):
         
         return builtSelf
 
-class B_UI_Component_Dropdown_Builder(B_UI_Builder_WithParent):
-    def __init__(self, name: str, parent: B_UI_Container_Builder, **kwargs):
-        self.choicesMap = {}
+class B_UI_Component_Dropdown_Builder(B_UI_Builder):
+    def __init__(self, name: str, parent: B_UI_Container_Builder, **kwargs: str):
+        self.parent = parent
         
-        super().__init__(name, parent, **kwargs)
+        self.choicesMap: dict[str, B_Prompt] = {}
+        
+        super().__init__(name, **kwargs)
     
-    def addChoice(self, text: str, **kwargs):
+    def addChoice(self, text: str, **kwargs: str):
         bPrompt: B_Prompt = None
         
-        link_type = kwargs.get("link_type", None)
+        link_type = kwargs.get("link_type", "")
         match link_type:
             case "SLIDER":
                 bPrompt = B_Prompt_Link_Slider._fromArgs(**kwargs)
@@ -719,8 +738,8 @@ class B_UI_Component_Dropdown_Builder(B_UI_Builder_WithParent):
         
         self.choicesMap[text] = bPrompt
     
-    def addChoices(self, **kwargs):
-        choicesMap = {}
+    def addChoices(self, **kwargs: str):
+        choicesMap: dict[str, B_Prompt] = {}
         
         special_type = kwargs["type"]
         match special_type:
@@ -740,16 +759,18 @@ class B_UI_Component_Dropdown_Builder(B_UI_Builder_WithParent):
         return builtSelf
 
 class B_UI_Preset_Builder(B_UI_Builder):
-    def __init__(self, name: str, **kwargs):
-        self.mappings = {}
+    def __init__(self, name: str, **kwargs: str):
+        self.mappings: dict[str, list[str]] = {}
         
         super().__init__(name, **kwargs)
     
-    def addMapping(self, name: str, **kwargs):
-        value = kwargs.get("v", [])
+    def addMapping(self, name: str, **kwargs: str):
+        value = kwargs.get("v", "")
         
         if len(value) > 0:
             value = list(map(lambda v: v.strip(), value.split(",")))
+        else:
+            value = list[str]([])
         
         self.mappings[name] = value
     
@@ -761,7 +782,7 @@ class B_UI_Map():
         self.layout = self.parseLayout(os.path.join(path_base, file_name_layout), tagged_show)
         self.presets = self.parsePresets(os.path.join(path_base, file_name_presets))
         
-        self.componentMap = {}
+        self.componentMap: dict[str, B_UI_Component] = {}
         
         self.buildComponentMapRecursive(self.layout, self.componentMap)
     
@@ -802,7 +823,7 @@ class B_UI_Map():
         
         skip = 0
         
-        def _build(builder: B_UI_Builder_WithParent):
+        def _build(builder: B_UI_Container_Builder | B_UI_Component_Builder | B_UI_Component_Dropdown_Builder):
             built = builder.build()
             if builder.parent is None:
                 layout.append(built)
@@ -833,7 +854,7 @@ class B_UI_Map():
                     
                     continue
                 
-                if l_args.get("x", None) == "1":
+                if l_args.get("x", "") == "1":
                     if not tagged_show:
                         skip += 1
                         continue
@@ -965,10 +986,10 @@ class B_UI_Map():
                 self.buildComponentMapRecursive(x.items, target)
                 continue
     
-    def buildUI(self):
+    def buildUI(self) -> list[any]:
         B_UI._buildSeparator()
         
-        components = []
+        components: list[any] = []
         
         for item in self.layout:
             item_ui = item.buildUI()
@@ -980,7 +1001,7 @@ class B_UI_Map():
         
         return components
     
-    def buildPresetsUI(self, components: list):
+    def buildPresetsUI(self, components: list[any]):
         presetKeys = self.presets.keys()
         
         if len(presetKeys) == 0:
@@ -994,7 +1015,7 @@ class B_UI_Map():
                 if not hasPresetValue:
                     return self.componentMap[component.label].defaultValue if not preset.isAdditive else componentValue
                 
-                presetValue = preset.mappings[component.label]
+                presetValue: any = preset.mappings[component.label]
                 
                 if type(component) is not gr.Dropdown or not component.multiselect:
                     presetValue = presetValue[0]
@@ -1036,8 +1057,6 @@ class Script(scripts.Script):
         return b_layout.buildUI()
 
     def run(self, p, *args):
-        components = []
-        
         i = 0
         for k in list(b_layout.componentMap):
             component = b_layout.componentMap[k]
