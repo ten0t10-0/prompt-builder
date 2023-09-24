@@ -511,7 +511,9 @@ class B_UI_Component_Dropdown(B_UI_Component):
         return gr.Dropdown.update(value = self.handleUpdateValue(value))
     
     def finalizeComponent(self, componentMap: dict):
-        bComponents: list[B_UI_Component] = componentMap.values()
+        bComponents: list[B_UI_Component] = list(componentMap.values())
+        bComponents.remove(self)
+        
         components: list[any] = list(map(lambda bComponent: bComponent.component, bComponents))
 
         anyChoiceMapHasPreset = any(
