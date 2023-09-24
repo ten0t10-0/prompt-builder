@@ -521,25 +521,25 @@ class B_UI_Component_Dropdown(B_UI_Component):
             )
         )
         if anyChoiceMapHasPreset:
-            def getPresetValues(choice: str | list[str], *args):
-                if type(choice) is str:
-                    choice = [choice]
+            def getPresetValues(choices: str | list[str], *args):
+                if type(choices) is str:
+                    choices = [choices]
                 
-                if len(choice) == 0:
-                    return list(args)
-
-                bPrompt = self.choicesMap[choice[0]]
+                updatedValues: list[any] = list(args)
                 
-                if not issubclass(type(bPrompt), B_Prompt_Simple) or bPrompt.preset == None:
-                    return list(args)
-                
-                bPrompt: B_Prompt_Simple = bPrompt
-                updatedValues: list[any] = []
-                
-                i = 0
-                for bComponent in bComponents:
-                    updatedValues.append(bPrompt.preset.getPresetValue(bComponent, args[i]))
-                    i += 1
+                if len(choices) > 0:
+                    for choice in choices:
+                        bPrompt = self.choicesMap[choice]
+                        
+                        if not issubclass(type(bPrompt), B_Prompt_Simple) or bPrompt.preset == None:
+                            continue
+                        
+                        bPrompt: B_Prompt_Simple = bPrompt
+                        
+                        i = 0
+                        for bComponent in bComponents:
+                            updatedValues[i] = bPrompt.preset.getPresetValue(bComponent, updatedValues[i])
+                            i += 1
                 
                 return updatedValues
             

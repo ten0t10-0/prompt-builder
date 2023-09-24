@@ -10,6 +10,11 @@ GROUP All --build_reset_button 1
 			CHOICE ChoiceA --p promptA
 			CHOICE ChoiceB --p promptB --n promptC
 			CHOICE ChoiceC --n promptC
+			CHOICE ChoiceD --p promptD
+				SET Positive prompt --v somePositivePrompt
+				SET SomeColorMultiDropdown --v Black, White
+				SET SomethingA - SomethingB --v 15
+			END
 		END
 	END
 
