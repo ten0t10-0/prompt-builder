@@ -41,6 +41,8 @@ class B_UI(ABC):
         self.identifier = self.getNextIdentifier()
         self.name = self.handleName(name)
         self.visible = visible
+
+        self.ui: any = None
     
     def getNextIdentifier(self) -> int:
         B_UI._identifier += 1
@@ -71,15 +73,13 @@ class B_UI_Component(B_UI, ABC):
 
         self.value = defaultValue
         self.defaultValue = defaultValue
-        
-        self.component = None
     
     def handleUpdateValue(self, value):
         return value if value is not None else self.defaultValue
     
     def buildUI(self) -> any:
         component = self.buildComponent()
-        self.component = component[0]
+        self.ui = component[0]
         return component
     
     @abstractmethod
@@ -186,7 +186,9 @@ class B_UI_Container(B_UI):
     def buildUI(self) -> any:
         components = []
         
-        with self.buildContainer():
+        self.ui = self.buildContainer()
+
+        with self.ui:
             components = self.buildComponents()
         
         return components
@@ -212,7 +214,7 @@ class B_UI_Preset():
         self.isAdditive = isAdditive
     
     def getPresetValue(self, bComponent: B_UI_Component, componentValue):
-        component = bComponent.component
+        component = bComponent.ui
         
         hasPresetValue = component.label in self.mappings
         if not hasPresetValue:
@@ -522,7 +524,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
         bComponents: list[B_UI_Component] = list(componentMap.values())
         bComponents.remove(self)
         
-        components: list[any] = list(map(lambda bComponent: bComponent.component, bComponents))
+        components: list[any] = list(map(lambda bComponent: bComponent.ui, bComponents))
 
         anyChoiceMapHasPreset = any(
             map(
@@ -553,9 +555,9 @@ class B_UI_Component_Dropdown(B_UI_Component):
                 
                 return updatedValues
             
-            self.component.select(
+            self.ui.select(
                 fn = getPresetValues
-                , inputs = [self.component] + components
+                , inputs = [self.ui] + components
                 , outputs = components
             )
 
@@ -1101,7 +1103,7 @@ class B_UI_Map():
             return
         
         bComponents = self.componentMap.values()
-        components: list[any] = list(map(lambda bComponent: bComponent.component, bComponents))
+        components: list[any] = list(map(lambda bComponent: bComponent.ui, bComponents))
         
         presetKeys = self.presets.keys()
         
