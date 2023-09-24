@@ -47,7 +47,7 @@ class B_UI(ABC):
         return B_UI._identifier
     
     def handleName(self, name: str = None) -> str:
-        if name is None:
+        if name is None or len(name) == 0:
             name = f"{self.identifier}_{self.getDefaultName()}"
         
         return name
@@ -67,12 +67,12 @@ class B_UI_Component(B_UI, ABC):
         pass
     
     def __init__(self, name: str = None, defaultValue = None, visible: bool = True):
+        super().__init__(name, visible)
+
         self.value = defaultValue
         self.defaultValue = defaultValue
         
         self.component = None
-        
-        super().__init__(name, visible)
     
     def handleUpdateValue(self, value):
         return value if value is not None else self.defaultValue
@@ -113,10 +113,12 @@ class B_UI_Container(B_UI):
         pass
 
     def __init__(self, name: str = None, items: list[B_UI] = [], visible: bool = True, buildResetButton: bool = False, buildCustomPromptInputs: bool = False):
+        super().__init__(name, visible)
+        
         self.items = self.handleItems(items, buildCustomPromptInputs, name)
         self.buildResetButton = buildResetButton
-        
-        super().__init__(name, visible)
+
+        self.bComponents = self.getBComponents()
     
     def handleItems(self, items: list[B_UI], buildCustomPromptInputs: bool, prefix: str) -> list[B_UI]:
         if buildCustomPromptInputs:
@@ -132,11 +134,13 @@ class B_UI_Container(B_UI):
             item_type = type(item)
             
             if issubclass(item_type, B_UI_Component):
-                bComponents.append(item)
+                item_bComponent: B_UI_Component = item
+                bComponents.append(item_bComponent)
                 continue
             
             if issubclass(item_type, B_UI_Container):
-                bComponents += item.getBComponents()
+                item_bContainer: B_UI_Container = item
+                bComponents += item_bContainer.bComponents
                 continue
         
         return bComponents
@@ -247,11 +251,11 @@ class B_Prompt_Simple(B_Prompt):
         return B_Prompt_Simple("", "")
     
     def __init__(self, promptPositive: str = "", promptNegative: str = "", preset: B_UI_Preset = None):
+        super().__init__()
+
         self.positive = promptPositive
         self.negative = promptNegative
         self.preset = preset
-
-        super().__init__()
     
     def getPositive(self, componentMap: dict[str, B_UI_Component]) -> str:
         return self.positive
@@ -269,13 +273,13 @@ class B_Prompt_Link_Slider(B_Prompt):
         )
     
     def __init__(self, linkedKey: str, promptA: str, promptB: str):
+        super().__init__()
+
         self.linkedKey = linkedKey
         self.promptA = promptA
         self.promptB = promptB
         
         self.isNegativePrompt = False
-        
-        super().__init__()
     
     def buildPrompt(self, componentMap: dict[str, B_UI_Component]) -> str:
         component = componentMap.get(self.linkedKey)
@@ -314,10 +318,10 @@ class B_UI_Component_Textbox(B_UI_Component):
         )
     
     def __init__(self, name: str = None, defaultValue: str = "", isNegativePrompt: bool = False, scale: int = None, visible: bool = True):
+        super().__init__(name, defaultValue, visible)
+
         self.isNegativePrompt = isNegativePrompt
         self.scale = scale
-        
-        super().__init__(name, defaultValue, visible)
     
     def getDefaultName(self) -> str:
         return "Textbox"
@@ -406,14 +410,17 @@ class B_UI_Component_Dropdown(B_UI_Component):
         , scale: int = None
         , visible: bool = True
     ):
-        self.choicesMap = self.buildChoicesMap(choicesMap, not multiselect)
+        choicesMapFinal = self.buildChoicesMap(choicesMap, not multiselect)
+        defaultValueFinal = self.buildDefaultValue(choicesMap, defaultValues, multiselect, list(choicesMapFinal)[0])
+        
+        super().__init__(name, defaultValueFinal, visible)
+        
+        self.choicesMap = choicesMapFinal
         self.multiselect = multiselect
         self.allowCustomValues = allowCustomValues if not multiselect else False
         self.sortChoices = sortChoices
         self.hideLabel = hideLabel
         self.scale = scale
-        
-        super().__init__(name, self.buildDefaultValue(choicesMap, defaultValues), visible)
     
     def buildChoicesMap(self, choicesMap: dict[str, B_Prompt], insertEmptyChoice: bool) -> dict[str, B_Prompt]:
         choicesMapFinal = choicesMap
@@ -427,15 +434,15 @@ class B_UI_Component_Dropdown(B_UI_Component):
         
         return choicesMapFinal
     
-    def buildDefaultValue(self, choicesMap: dict[str, B_Prompt], defaultValues: str | list[str]) -> str | list[str]:
-        defaultValue: str | list[str] = None if not self.multiselect else []
+    def buildDefaultValue(self, choicesMap: dict[str, B_Prompt], defaultValues: str | list[str], multiselect: bool, fallbackValue: str) -> str | list[str]:
+        defaultValue: str | list[str] = None if not multiselect else []
         
         if (type(defaultValues) is str or defaultValues is None):
             defaultValues = [defaultValues]
         
         if len(choicesMap) > 0:
             choices = list(choicesMap)
-            if self.multiselect:
+            if multiselect:
                 if defaultValues[0] is not None:
                     defaultValue = []
                     for v in defaultValues:
@@ -446,7 +453,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
                 if defaultValueFirst is not None and defaultValueFirst in choices:
                     defaultValue = defaultValueFirst
                 else:
-                    defaultValue = list(self.choicesMap)[0]
+                    defaultValue = fallbackValue
         
         return defaultValue
     
@@ -568,6 +575,8 @@ class B_UI_Component_Slider(B_UI_Component):
         )
     
     def __init__(self, name: str = None, promptA: str = "", promptB: str = "", defaultValue: float = None, isRequired: bool = False, visible: bool = True, buildButtons: bool = True, promptAButton: str = "", promptBButton: str = ""):
+        super().__init__(name, defaultValue, visible)
+        
         self.promptA = promptA.strip()
         self.promptB = promptB.strip()
         self.isRequired = isRequired
@@ -576,8 +585,6 @@ class B_UI_Component_Slider(B_UI_Component):
         self.promptBButton = promptBButton
         
         self.isNegativePrompt = False
-        
-        super().__init__(name, defaultValue, visible)
     
     def getMinimum(self) -> float:
         return -1 if not self.isRequired else 0
@@ -687,9 +694,9 @@ class B_UI_Container_Column(B_UI_Container):
         )
     
     def __init__(self, items: list[B_UI] = [], scale: int = 1, visible: bool = True, buildResetButton: bool = False, name: str = None):
-        self.scale = scale
-        
         super().__init__(name, items, visible, buildResetButton)
+        
+        self.scale = scale
     
     def getDefaultName(self) -> str:
         return "Column"
@@ -746,9 +753,9 @@ class B_UI_Builder(ABC):
 
 class B_UI_Builder_WithChildren(B_UI_Builder):
     def __init__(self, name: str, **kwargs: str):
-        self.builtChildren: list[B_UI] = []
-        
         super().__init__(name, **kwargs)
+        
+        self.builtChildren: list[B_UI] = []
     
     @abstractmethod
     def build(self) -> B_UI:
@@ -756,9 +763,9 @@ class B_UI_Builder_WithChildren(B_UI_Builder):
 
 class B_UI_Preset_Builder(B_UI_Builder):
     def __init__(self, name: str, **kwargs: str):
-        self.mappings: dict[str, list[str]] = {}
-        
         super().__init__(name, **kwargs)
+        
+        self.mappings: dict[str, list[str]] = {}
     
     def addMapping(self, name: str, **kwargs: str):
         value = kwargs.get("v", "")
@@ -775,10 +782,10 @@ class B_UI_Preset_Builder(B_UI_Builder):
 
 class B_UI_Container_Builder(B_UI_Builder_WithChildren):
     def __init__(self, t: type[B_UI_Container], name: str, parent: B_UI_Builder_WithChildren, **kwargs: str):
+        super().__init__(name, **kwargs)
+        
         self.t = t
         self.parent = parent
-        
-        super().__init__(name, **kwargs)
     
     def finalizeBuilt(self, built: B_UI):
         if self.parent is not None:
@@ -791,10 +798,10 @@ class B_UI_Container_Builder(B_UI_Builder_WithChildren):
 
 class B_UI_Component_Builder(B_UI_Builder):
     def __init__(self, t: type[B_UI_Component], name: str, parent: B_UI_Container_Builder, **kwargs: str):
+        super().__init__(name, **kwargs)
+        
         self.t = t
         self.parent = parent
-        
-        super().__init__(name, **kwargs)
     
     def build(self) -> B_UI:
         builtSelf = self.t._fromArgs(self.name, **self.args)
@@ -806,11 +813,11 @@ class B_UI_Component_Builder(B_UI_Builder):
 
 class B_UI_Component_Dropdown_Builder(B_UI_Builder):
     def __init__(self, name: str, parent: B_UI_Container_Builder, **kwargs: str):
+        super().__init__(name, **kwargs)
+        
         self.parent = parent
         
         self.choicesMap: dict[str, B_Prompt] = {}
-        
-        super().__init__(name, **kwargs)
     
     def addChoice(self, text: str, preset_builder: B_UI_Preset_Builder, **kwargs: str):
         bPrompt: B_Prompt = None
@@ -850,11 +857,10 @@ class B_UI_Map():
         self.layout = self.parseLayout(os.path.join(path_base, file_name_layout), tagged_show)
         self.presets = self.parsePresets(os.path.join(path_base, file_name_presets))
         
-        self.componentMap: dict[str, B_UI_Component] = {}
-        
-        self.buildComponentMapRecursive(self.layout, self.componentMap)
+        self.componentMap = self.buildComponentMap()
     
     def readLine(self, l: str) -> tuple[str, str, dict[str, str]]:
+        # TODO: Fix empty str l_name
         l = l.strip()
         
         l_type = l
@@ -1046,34 +1052,31 @@ class B_UI_Map():
         
         return presets
     
-    def buildComponentMapRecursive(self, source: list[B_UI], target: dict[str, B_UI_Component]):
-        for x in source:
+    def buildComponentMap(self) -> dict[str, B_UI_Component]:
+        componentMap: dict[str, B_UI_Component] = {}
+
+        def mapBComponent(bComponent: B_UI_Component):
+            if bComponent.name in componentMap:
+                print(f"WARNING: Duplicate attribute -> {bComponent.name}")
+            
+            componentMap[bComponent.name] = bComponent
+        
+        for x in self.layout:
             x_type = type(x)
             
-            x_isComponent = issubclass(x_type, B_UI_Component)
-            x_isContainer = issubclass(x_type, B_UI_Container)
-            
-            x_isLabeled = (
-                x_isComponent
-                or issubclass(x_type, B_UI_Container_Tab)
-                or issubclass(x_type, B_UI_Container_Accordion)
-            )
-            
-            key = ""
-            if x_isLabeled:
-                key = x.name
-            
-            if x_isComponent:
-                if key in target:
-                    print(f"WARNING: Duplicate attribute -> {key}")
-                
-                target[key] = x
-                
+            if issubclass(x_type, B_UI_Component):
+                mapBComponent(x)
                 continue
-            
-            if x_isContainer:
-                self.buildComponentMapRecursive(x.items, target)
-                continue
+
+            if issubclass(x_type, B_UI_Container):
+                x_bContainer: B_UI_Container = x
+                if len(x_bContainer.bComponents) == 0:
+                    continue
+
+                for bComponent in x_bContainer.bComponents:
+                    mapBComponent(bComponent)
+        
+        return componentMap
     
     def buildUI(self) -> list[any]:
         B_UI._buildSeparator()
