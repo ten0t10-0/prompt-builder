@@ -391,6 +391,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
             , "Purple": B_Prompt_Simple(f"purple{postfixPrompt}")
             , "Orange": B_Prompt_Simple(f"orange{postfixPrompt}")
             , "Yellow": B_Prompt_Simple(f"yellow{postfixPrompt}")
+            , "Multicolored": B_Prompt_Simple(f"multicolored{postfixPrompt}")
         }
     
     def __init__(
