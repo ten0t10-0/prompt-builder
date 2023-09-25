@@ -354,6 +354,10 @@ class B_UI_Component_Textbox(B_UI_Component):
         pass
 
 class B_UI_Component_Dropdown(B_UI_Component):
+    empty_choice: str = "-"
+    advanced_defaultValue: float = 1
+    advanced_step: float = 0.1
+
     @staticmethod
     def _fromArgs(name: str, *args, **kwargs: str):
         choicesMap: dict[str, B_Prompt] = args[0]
@@ -369,6 +373,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
             , multiselect = bool(int(kwargs.get("multi_select", 0)))
             , allowCustomValues = bool(int(kwargs.get("allow_custom", 1)))
             , sortChoices = bool(int(kwargs.get("sort", 1)))
+            , advanced = bool(int(kwargs.get("advanced", 0)))
             , hideLabel = bool(int(kwargs.get("hide_label", 0)))
             , scale = int(kwargs.get("scale", 1))
             , visible = not bool(int(kwargs.get("hide", 0)))
@@ -408,6 +413,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
         , multiselect: bool = False
         , allowCustomValues: bool = True
         , sortChoices: bool = True
+        , advanced: bool = False
         , hideLabel: bool = False
         , scale: int = None
         , visible: bool = True
@@ -421,6 +427,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
         self.multiselect = multiselect
         self.allowCustomValues = allowCustomValues if not multiselect else False
         self.sortChoices = sortChoices
+        self.advanced = advanced
         self.hideLabel = hideLabel
         self.scale = scale
     
@@ -429,7 +436,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
         
         if insertEmptyChoice:
             choicesMapFinal = {
-                "-": B_Prompt_Simple._createEmpty()
+                self.empty_choice: B_Prompt_Simple._createEmpty()
             }
             
             choicesMapFinal.update(choicesMap)
@@ -467,7 +474,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
         
         choicesSorted: list[str] = []
         
-        if choices[0] == "-":
+        if choices[0] == self.empty_choice:
             choicesSorted.append(choices.pop(0))
         
         choices.sort()
@@ -475,47 +482,121 @@ class B_UI_Component_Dropdown(B_UI_Component):
         
         return choicesSorted
     
-    def getBPromptsFromValue(self) -> list[B_Prompt]:
-        bPrompts: list[B_Prompt] = []
+    def getBPromptsFromValue(self) -> list[tuple[str, B_Prompt]]:
+        bPrompts: list[tuple[str, B_Prompt]] = []
         
         if type(self.value) is str:
-            bPrompts.append(self.choicesMap.get(self.value, None if not self.allowCustomValues else B_Prompt_Simple(self.value)))
+            bPrompts.append((self.value, self.choicesMap.get(self.value, None if not self.allowCustomValues else B_Prompt_Simple(self.value))))
         elif type(self.value) is list and len(self.value) > 0:
             for k in list(self.choicesMap):
                 if k not in self.value:
                     continue
                 
-                bPrompts.append(self.choicesMap[k])
+                bPrompts.append((k, self.choicesMap[k]))
         
         return bPrompts
+    
+    def setAdvancedValue(self, choice: str, value: float):
+        self.advanced_values[choice.replace("*", "")] = value
     
     def getDefaultName(self) -> str:
         return "Dropdown"
     
     def buildComponent(self) -> list[any]:
-        return [
-            gr.Dropdown(
-                label = self.name
-                , choices = self.getChoices()
-                , multiselect = self.multiselect
-                , value = self.value
-                , allow_custom_value = self.allowCustomValues
-                , show_label = not self.hideLabel
-                , scale = self.scale
-                , visible = self.visible
+        component = gr.Dropdown(
+            label = self.name
+            , choices = self.getChoices()
+            , multiselect = self.multiselect
+            , value = self.value
+            , allow_custom_value = self.allowCustomValues
+            , show_label = not self.hideLabel
+            , scale = self.scale
+            , visible = self.visible
+        )
+
+        if self.advanced:
+            self.advanced_options: dict[str, tuple[any, any]] = {}
+            self.advanced_values: dict[str, float] = {}
+            
+            row = gr.Row(variant = "panel", visible = self.value is not None and len(self.value) > 0 and self.value != self.empty_choice)
+            with row:
+                for k in self.choicesMap:
+                    if k == self.empty_choice:
+                        continue
+
+                    column = gr.Column(variant = "panel", visible = self.value is not None and (self.value == k or k in self.value))
+                    with column:
+                        with gr.Row():
+                            markdown = gr.Markdown(f"**{k}**")
+                        with gr.Row():
+                            number = gr.Number(label = f"{self.name}_{k}", show_label = False, value = self.advanced_defaultValue, step = self.advanced_step)
+                            number.input(
+                                fn = self.setAdvancedValue
+                                , inputs = [markdown, number]
+                            )
+                    self.advanced_options[k] = number, column
+                    self.advanced_values[k] = self.advanced_defaultValue
+            self.advanced_container = row
+            
+            def _update(choice: str | list[str]):
+                outputMap: dict[str, bool] = {}
+
+                for k in self.choicesMap:
+                    if k == self.empty_choice:
+                        continue
+                    
+                    outputMap[k] = False
+                
+                choices: list[str] = []
+                if type(choice) is str:
+                    choices.append(choice)
+                else:
+                    choices += choice
+                
+                for k in choices:
+                    if k == self.empty_choice:
+                        continue
+                    
+                    outputMap[k] = True
+                
+                output: list = [self.advanced_container.update(visible = any(list(outputMap.values())))]
+                for k in outputMap:
+                    self.advanced_values[k] = self.advanced_defaultValue
+                    output.append(self.advanced_options[k][0].update(value = self.advanced_values[k], step = self.advanced_step))
+                    output.append(self.advanced_options[k][1].update(visible = outputMap[k]))
+                
+                return output
+
+            component.change(
+                fn = _update
+                , inputs = component
+                , outputs = [self.advanced_container] + sum(list(map(lambda t: list(t), self.advanced_options.values())), [])
             )
+
+
+        return [
+            component
         ]
     
     def setValue(self, value):
         self.value = value
     
     def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict[str, B_UI_Component]):
+        # TODO: Investigate strength param usage in negative prompts
         bPrompts = self.getBPromptsFromValue()
         if len(bPrompts) > 0:
-            for bPrompt in bPrompts:
+            for choice, bPrompt in bPrompts:
+                positive = bPrompt.getPositive(componentMap)
+                negative = bPrompt.getNegative(componentMap)
+                
+                if self.advanced and choice != self.empty_choice:
+                    value = self.advanced_values[choice]
+                    if value != 1:
+                        positive = f"({positive}:{value})"
+
                 if bPrompt is not None:
-                    p.prompt = addPrompt(p.prompt, bPrompt.getPositive(componentMap))
-                    p.negative_prompt = addPrompt(p.negative_prompt, bPrompt.getNegative(componentMap))
+                    p.prompt = addPrompt(p.prompt, positive)
+                    p.negative_prompt = addPrompt(p.negative_prompt, negative)
     
     def getUpdate(self, value = None) -> any:
         return gr.Dropdown.update(value = self.handleUpdateValue(value))

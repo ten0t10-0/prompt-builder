@@ -6,7 +6,7 @@ GROUP All --build_reset_button 1
 			TEXTBOX Negative prompt --is_negative 1 --v promptA, promptB
 		END
 
-		DROPDOWN SomeDropdownA --v ChoiceA, ChoiceB --multi_select 1
+		DROPDOWN SomeDropdownA --v ChoiceA, ChoiceB --multi_select 1 --advanced 1
 			CHOICE ChoiceA --p promptA
 			CHOICE ChoiceB --p promptB --n promptC
 			CHOICE ChoiceC --n promptC
