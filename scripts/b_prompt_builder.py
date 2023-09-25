@@ -497,45 +497,69 @@ class B_UI_Component_Dropdown(B_UI_Component):
         return bPrompts
     
     def setAdvancedValue(self, choice: str, value: float):
-        self.advanced_values[choice.replace("*", "")] = value
+        self.advanced_values[choice] = value
     
     def getDefaultName(self) -> str:
         return "Dropdown"
     
     def buildComponent(self) -> list[any]:
-        component = gr.Dropdown(
-            label = self.name
-            , choices = self.getChoices()
-            , multiselect = self.multiselect
-            , value = self.value
-            , allow_custom_value = self.allowCustomValues
-            , show_label = not self.hideLabel
-            , scale = self.scale
-            , visible = self.visible
-        )
+        def _build(useScale: bool = True):
+            return gr.Dropdown(
+                label = self.name
+                , choices = self.getChoices()
+                , multiselect = self.multiselect
+                , value = self.value
+                , allow_custom_value = self.allowCustomValues
+                , show_label = not self.hideLabel
+                , scale = self.scale if useScale else None
+                , visible = self.visible
+            )
 
-        if self.advanced:
+        if not self.advanced:
+            component = _build()
+        else:
             self.advanced_options: dict[str, tuple[any, any]] = {}
             self.advanced_values: dict[str, float] = {}
             
-            row = gr.Row(variant = "panel", visible = self.value is not None and len(self.value) > 0 and self.value != self.empty_choice)
-            with row:
-                for k in self.choicesMap:
-                    if k == self.empty_choice:
-                        continue
+            with gr.Column(
+                scale = self.scale
+                , min_width = 160
+            ):
+                component = _build(False)
+                row = gr.Row(
+                    variant = "panel"
+                    , visible = self.value is not None and len(self.value) > 0 and self.value != self.empty_choice
+                )
+                with row:
+                    for k in self.choicesMap:
+                        if k == self.empty_choice:
+                            continue
 
-                    column = gr.Column(variant = "panel", visible = self.value is not None and (self.value == k or k in self.value))
-                    with column:
-                        with gr.Row():
-                            markdown = gr.Markdown(f"**{k}**")
-                        with gr.Row():
-                            number = gr.Number(label = f"{self.name}_{k}", show_label = False, value = self.advanced_defaultValue, step = self.advanced_step)
+                        column = gr.Column(
+                            variant = "panel"
+                            , visible = self.value is not None and (self.value == k or k in self.value)
+                            , min_width = 160
+                        )
+                        with column:
+                            markdown = gr.Markdown(
+                                value = f"{k}"
+                                , visible = False
+                            )
+
+                            number = gr.Number(
+                                label = f"{k} (S)"
+                                , value = self.advanced_defaultValue
+                                , step = self.advanced_step
+                                , minimum = 0
+                            )
                             number.input(
                                 fn = self.setAdvancedValue
                                 , inputs = [markdown, number]
                             )
-                    self.advanced_options[k] = number, column
-                    self.advanced_values[k] = self.advanced_defaultValue
+                        
+                        self.advanced_options[k] = number, column
+                        self.advanced_values[k] = self.advanced_defaultValue
+            
             self.advanced_container = row
             
             def _update(choice: str | list[str]):
@@ -572,8 +596,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
                 , inputs = component
                 , outputs = [self.advanced_container] + sum(list(map(lambda t: list(t), self.advanced_options.values())), [])
             )
-
-
+        
         return [
             component
         ]
@@ -582,7 +605,6 @@ class B_UI_Component_Dropdown(B_UI_Component):
         self.value = value
     
     def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict[str, B_UI_Component]):
-        # TODO: Investigate strength param usage in negative prompts
         bPrompts = self.getBPromptsFromValue()
         if len(bPrompts) > 0:
             for choice, bPrompt in bPrompts:
@@ -591,6 +613,10 @@ class B_UI_Component_Dropdown(B_UI_Component):
                 
                 if self.advanced and choice != self.empty_choice:
                     value = self.advanced_values[choice]
+                    
+                    if value <= 0:
+                        continue
+
                     if value != 1:
                         if len(positive) > 0:
                             positive = f"({positive}:{value})"
