@@ -592,7 +592,10 @@ class B_UI_Component_Dropdown(B_UI_Component):
                 if self.advanced and choice != self.empty_choice:
                     value = self.advanced_values[choice]
                     if value != 1:
-                        positive = f"({positive}:{value})"
+                        if len(positive) > 0:
+                            positive = f"({positive}:{value})"
+                        if len(negative) > 0:
+                            negative = f"({negative}:{value})"
 
                 if bPrompt is not None:
                     p.prompt = addPrompt(p.prompt, positive)
