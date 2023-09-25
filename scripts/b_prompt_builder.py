@@ -33,10 +33,6 @@ def buildRangePrompt(promptA: str, promptB: str, value: float) -> str:
 class B_UI(ABC):
     _identifier: int = 0
     
-    @staticmethod
-    def _buildSeparator():
-        return gr.Markdown("<hr style=\"margin: 0.5em 0; border-style: dotted; border-color: var(--border-color-primary);\" />")
-    
     def __init__(self, name: str, visible: bool):
         self.identifier = self.getNextIdentifier()
         self.name = self.handleName(name)
@@ -59,8 +55,47 @@ class B_UI(ABC):
         pass
     
     @abstractmethod
-    def buildUI(self) -> any:
+    def buildUI(self) -> list[any]:
+        """Returns a list of Gradio components"""
         pass
+
+class B_UI_Markdown(B_UI):
+    html_separator: str = "<hr style=\"margin: 0.5em 0; border-style: dotted; border-color: var(--border-color-primary);\" />"
+
+    @staticmethod
+    def _fromArgs(isSeparator: bool, **kwargs: str):
+        return B_UI_Markdown(
+            isSeparator = isSeparator
+            , value = kwargs.get("v", None)
+            , visible = not bool(int(kwargs.get("hide", 0)))
+        )
+
+    @staticmethod
+    def _buildSeparator():
+        markdown = B_UI_Markdown(isSeparator = True)
+        markdown.buildUI()
+        return markdown.ui
+    
+    def __init__(self, value: str = None, isSeparator: bool = False, visible: bool = True):
+        super().__init__(None, visible)
+
+        if isSeparator:
+            value = self.html_separator
+        
+        self.value: str = value
+    
+    def getDefaultName(self) -> str:
+        return "Markdown"
+    
+    def buildUI(self) -> list[any]:
+        markdown = gr.Markdown(
+            value = self.value
+            , visible = self.visible
+        )
+        
+        self.ui = markdown
+
+        return []
 
 class B_UI_Component(B_UI, ABC):
     @staticmethod
@@ -77,17 +112,16 @@ class B_UI_Component(B_UI, ABC):
     def handleUpdateValue(self, value):
         return value if value is not None else self.defaultValue
     
-    def buildUI(self) -> any:
-        component = self.buildComponent()
-        self.ui = component[0]
-        return component
+    def buildUI(self) -> list[any]:
+        self.ui = self.buildComponent()
+        return [self.ui]
     
     @abstractmethod
     def getDefaultName(self) -> str:
         pass
     
     @abstractmethod
-    def buildComponent(self) -> list[any]:
+    def buildComponent(self) -> any:
         pass
     
     @abstractmethod
@@ -145,21 +179,6 @@ class B_UI_Container(B_UI):
         
         return bComponents
     
-    def buildComponents(self) -> list[any]:
-        components = []
-        
-        for item in self.items:
-            item_ui = item.buildUI()
-            
-            if len(item_ui) > 0:
-                components += item_ui
-        
-        if self.buildResetButton:
-            B_UI._buildSeparator()
-            btnReset = self.buildButton_Reset(components)
-        
-        return components
-    
     def resetComponentsValues(self, *args) -> any:
         updates = []
         
@@ -172,24 +191,26 @@ class B_UI_Container(B_UI):
         
         return updates
     
-    def buildButton_Reset(self, components: list[any]) -> any:
-        btnReset = gr.Button(value = f"Reset {self.name}")
-        
-        btnReset.click(
-            fn = self.resetComponentsValues
-            , inputs = components
-            , outputs = components
-        )
-        
-        return btnReset
-    
-    def buildUI(self) -> any:
-        components = []
+    def buildUI(self) -> list[any]:
+        components: list[any] = []
         
         self.ui = self.buildContainer()
-
         with self.ui:
-            components = self.buildComponents()
+            for item in self.items:
+                item_ui = item.buildUI()
+                
+                if len(item_ui) > 0:
+                    components += item_ui
+            
+            if self.buildResetButton:
+                B_UI_Markdown._buildSeparator()
+                
+                btnReset = gr.Button(value = f"Reset {self.name}")
+                btnReset.click(
+                    fn = self.resetComponentsValues
+                    , inputs = components
+                    , outputs = components
+                )
         
         return components
     
@@ -328,15 +349,13 @@ class B_UI_Component_Textbox(B_UI_Component):
     def getDefaultName(self) -> str:
         return "Textbox"
     
-    def buildComponent(self) -> list[any]:
-        return [
-            gr.Textbox(
-                label = self.name
-                , value = self.value
-                , scale = self.scale
-                , visible = self.visible
-            )
-        ]
+    def buildComponent(self) -> any:
+        return gr.Textbox(
+            label = self.name
+            , value = self.value
+            , scale = self.scale
+            , visible = self.visible
+        )
     
     def setValue(self, value):
         self.value = value.strip()
@@ -597,9 +616,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
                 , outputs = [self.advanced_container] + sum(list(map(lambda t: list(t), self.advanced_options.values())), [])
             )
         
-        return [
-            component
-        ]
+        return component
     
     def setValue(self, value):
         self.value = value
@@ -734,9 +751,7 @@ class B_UI_Component_Slider(B_UI_Component):
                 self.buildButton(slider, self.promptAButton, 0)
                 self.buildButton(slider, self.promptBButton, self.getMaximum())
         
-        return [
-            slider
-        ]
+        return slider
     
     def setValue(self, value: any):
         value = float(value)
@@ -908,6 +923,21 @@ class B_UI_Container_Builder(B_UI_Builder_WithChildren):
     def build(self) -> B_UI:
         return self.finalizeBuilt(self.t._fromArgs(self.name, self.builtChildren, **self.args))
 
+class B_UI_Markdown_Builder(B_UI_Builder):
+    def __init__(self, isSeparator: bool, parent: B_UI_Container_Builder, **kwargs: str):
+        super().__init__(None, **kwargs)
+
+        self.isSeparator = isSeparator
+        self.parent = parent
+    
+    def build(self) -> B_UI:
+        builtSelf = B_UI_Markdown._fromArgs(self.isSeparator, **self.args)
+
+        if self.parent is not None:
+            self.parent.builtChildren.append(builtSelf)
+        
+        return builtSelf
+
 class B_UI_Component_Builder(B_UI_Builder):
     def __init__(self, t: type[B_UI_Component], name: str, parent: B_UI_Container_Builder, **kwargs: str):
         super().__init__(name, **kwargs)
@@ -1010,7 +1040,7 @@ class B_UI_Map():
         
         skip = 0
         
-        def _build(builder: B_UI_Container_Builder | B_UI_Component_Builder | B_UI_Component_Dropdown_Builder):
+        def _build(builder: B_UI_Markdown_Builder | B_UI_Container_Builder | B_UI_Component_Builder | B_UI_Component_Dropdown_Builder):
             built = builder.build()
             if builder.parent is None:
                 layout.append(built)
@@ -1127,6 +1157,12 @@ class B_UI_Map():
                         
                         builder_current_container = B_UI_Container_Builder(B_UI_Container_Accordion, l_name, builder_current_container, **l_args)
                     
+                    case "SEPARATOR":
+                        if skip > 0:
+                            continue
+                        
+                        built = _build(B_UI_Markdown_Builder(True, builder_current_container, **l_args))
+
                     case _:
                         print(f"Invalid layout type: {l_type}")
         
@@ -1191,7 +1227,7 @@ class B_UI_Map():
         return componentMap
     
     def buildUI(self) -> list[any]:
-        B_UI._buildSeparator()
+        B_UI_Markdown._buildSeparator()
         
         components: list[any] = []
         
@@ -1221,7 +1257,7 @@ class B_UI_Map():
             preset = self.presets[presetKey]
             return list(map(preset.getPresetValue, bComponents, args))
         
-        B_UI._buildSeparator()
+        B_UI_Markdown._buildSeparator()
         with gr.Accordion("Presets", open = False):
             i = 0
             for presetKey in presetKeys:
@@ -1234,7 +1270,7 @@ class B_UI_Map():
                 
                 i += 1
                 if i < len(presetKeys):
-                    B_UI._buildSeparator()
+                    B_UI_Markdown._buildSeparator()
 
 b_layout = B_UI_Map(
     path_base = os.path.join(scripts.basedir(), "scripts", "b_prompt_builder")
