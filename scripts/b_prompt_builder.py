@@ -481,7 +481,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
     empty_choice: str = "-"
     advanced_defaultValue: float = 1
     advanced_step: float = 0.1
-    random_maxChoices: int = 4
+    random_maxChoices: int = 5
 
     @staticmethod
     def _fromArgs(name: str, *args, **kwargs: str):
@@ -784,14 +784,20 @@ class B_UI_Component_Dropdown(B_UI_Component):
         if len(choiceKeys) == 0:
             value = currentValue
         else:
-            r = random.randint(0, len(choiceKeys) - 1)
             if self.multiselect:
                 value = []
 
-                for c in range(min(r + 1, self.random_maxChoices)):
-                    i = random.randint(0, len(choiceKeys) - 1)
-                    value.append(choiceKeys.pop(i))
+                cMax = len(choiceKeys)
+                if self.random_maxChoices > 0 and self.random_maxChoices < cMax:
+                    cMax = self.random_maxChoices
+                
+                r = random.randint(0, cMax)
+                if r > 0:
+                    for c in range(r):
+                        i = random.randint(0, len(choiceKeys) - 1)
+                        value.append(choiceKeys.pop(i))
             else:
+                r = random.randint(0, len(choiceKeys) - 1)
                 value = choiceKeys[r]
         
         return self.getUpdate(value)
