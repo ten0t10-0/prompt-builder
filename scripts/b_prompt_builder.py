@@ -347,18 +347,34 @@ class B_Prompt_Simple(B_Prompt):
             preset = preset
             , promptPositive = kwargs.get("p", "")
             , promptNegative = kwargs.get("n", "")
+            , prefix = kwargs.get("prefix", "")
+            , postfix = kwargs.get("postfix", "")
         )
     
     @staticmethod
     def _createEmpty():
         return B_Prompt_Simple("", "")
     
-    def __init__(self, promptPositive: str = "", promptNegative: str = "", preset: B_UI_Preset = None):
+    def __init__(self, promptPositive: str = "", promptNegative: str = "", prefix: str = "", postfix: str = "", preset: B_UI_Preset = None):
         super().__init__()
 
-        self.positive = promptPositive
-        self.negative = promptNegative
+        self.positive = self.initPrompt(promptPositive, prefix, postfix)
+        self.negative = self.initPrompt(promptNegative, prefix, postfix)
         self.preset = preset
+    
+    def initPrompt(self, prompt: str, prefix: str, postfix: str):
+        if len(prompt) == 0:
+            return prompt
+        
+        prefix = prefix.strip()
+        postfix = postfix.strip()
+
+        if len(prefix) > 0:
+            prefix = f"{prefix} "
+        if len(postfix) > 0:
+            postfix = f" {postfix}"
+        
+        return f"{prefix}{prompt}{postfix}"
     
     def getPositive(self, componentMap: dict[str, B_UI_Component]) -> str:
         return self.positive
@@ -490,28 +506,23 @@ class B_UI_Component_Dropdown(B_UI_Component):
     
     @staticmethod
     def _buildColorChoicesMap(postfixPrompt: str = "") -> dict[str, B_Prompt_Simple]:
-        postfixPrompt = postfixPrompt.strip()
-        
-        if len(postfixPrompt) > 0:
-            postfixPrompt = f" {postfixPrompt}"
-        
         return {
-            "Dark": B_Prompt_Simple(f"dark{postfixPrompt}")
-            , "Light": B_Prompt_Simple(f"light{postfixPrompt}")
-            , "Black": B_Prompt_Simple(f"black{postfixPrompt}")
-            , "Grey": B_Prompt_Simple(f"grey{postfixPrompt}")
-            , "White": B_Prompt_Simple(f"white{postfixPrompt}")
-            , "Brown": B_Prompt_Simple(f"brown{postfixPrompt}")
-            , "Blue": B_Prompt_Simple(f"blue{postfixPrompt}")
-            , "Green": B_Prompt_Simple(f"green{postfixPrompt}")
-            , "Red": B_Prompt_Simple(f"red{postfixPrompt}")
-            , "Blonde": B_Prompt_Simple(f"blonde{postfixPrompt}")
-            , "Rainbow": B_Prompt_Simple(f"rainbow{postfixPrompt}")
-            , "Pink": B_Prompt_Simple(f"pink{postfixPrompt}")
-            , "Purple": B_Prompt_Simple(f"purple{postfixPrompt}")
-            , "Orange": B_Prompt_Simple(f"orange{postfixPrompt}")
-            , "Yellow": B_Prompt_Simple(f"yellow{postfixPrompt}")
-            , "Multicolored": B_Prompt_Simple(f"multicolored{postfixPrompt}")
+            "Dark": B_Prompt_Simple(f"dark", postfix = postfixPrompt)
+            , "Light": B_Prompt_Simple(f"light", postfix = postfixPrompt)
+            , "Black": B_Prompt_Simple(f"black", postfix = postfixPrompt)
+            , "Grey": B_Prompt_Simple(f"grey", postfix = postfixPrompt)
+            , "White": B_Prompt_Simple(f"white", postfix = postfixPrompt)
+            , "Brown": B_Prompt_Simple(f"brown", postfix = postfixPrompt)
+            , "Blue": B_Prompt_Simple(f"blue", postfix = postfixPrompt)
+            , "Green": B_Prompt_Simple(f"green", postfix = postfixPrompt)
+            , "Red": B_Prompt_Simple(f"red", postfix = postfixPrompt)
+            , "Blonde": B_Prompt_Simple(f"blonde", postfix = postfixPrompt)
+            , "Rainbow": B_Prompt_Simple(f"rainbow", postfix = postfixPrompt)
+            , "Pink": B_Prompt_Simple(f"pink", postfix = postfixPrompt)
+            , "Purple": B_Prompt_Simple(f"purple", postfix = postfixPrompt)
+            , "Orange": B_Prompt_Simple(f"orange", postfix = postfixPrompt)
+            , "Yellow": B_Prompt_Simple(f"yellow", postfix = postfixPrompt)
+            , "Multicolored": B_Prompt_Simple(f"multicolored", postfix = postfixPrompt)
         }
     
     def __init__(
@@ -1218,6 +1229,10 @@ class B_UI_Map():
         def _buildDropdownChoice(dropdown_choice: tuple[str, B_UI_Preset_Builder, dict[str, str]]) -> bool:
             if dropdown_choice is not None:
                 l_choice_name, l_choice_preset_builder, l_choice_args = dropdown_choice
+
+                l_choice_args["prefix"] = builder_current_dropdown.args.get("prefix", "")
+                l_choice_args["postfix"] = builder_current_dropdown.args.get("postfix", "")
+
                 builder_current_dropdown.addChoice(l_choice_name, l_choice_preset_builder, **l_choice_args)
                 return len(l_choice_preset_builder.mappings) > 0
             
