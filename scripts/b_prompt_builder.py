@@ -2,6 +2,7 @@ import modules.scripts as scripts
 import gradio as gr
 import os
 import typing
+import random
 
 from abc import ABC, abstractmethod
 from modules import scripts
@@ -156,6 +157,10 @@ class B_UI_Component(B_UI, ABC):
         pass
 
     @abstractmethod
+    def getUpdateRandom(self, currentValue) -> typing.Any:
+        pass
+
+    @abstractmethod
     def finalizeComponent(self, componentMap: dict):
         pass
 
@@ -165,11 +170,12 @@ class B_UI_Container(B_UI):
     def _fromArgs(name: str, items: list[B_UI], **kwargs: str):
         pass
 
-    def __init__(self, name: str = None, items: list[B_UI] = [], visible: bool = True, buildResetButton: bool = False, buildCustomPromptInputs: bool = False):
+    def __init__(self, name: str = None, items: list[B_UI] = [], visible: bool = True, buildCustomPromptInputs: bool = False, buildResetButton: bool = False, buildRandomButton: bool = False):
         super().__init__(name, visible)
         
         self.items = self.handleItems(items, buildCustomPromptInputs, name)
         self.buildResetButton = buildResetButton
+        self.buildRandomButton = buildRandomButton
 
         self.bComponents = self.getBComponents()
     
@@ -198,12 +204,26 @@ class B_UI_Container(B_UI):
         
         return bComponents
     
-    def resetComponentsValues(self, *args) -> typing.Any:
+    def resetComponentsValues(self) -> list[typing.Any]:
         updates = []
         
         bComponents = self.getBComponents()
         for x in bComponents:
             updates.append(x.getUpdate())
+        
+        if len(updates) == 1:
+            updates = updates[0]
+        
+        return updates
+    
+    def randomizeComponentsValues(self, *components) -> list[typing.Any]:
+        updates = []
+        
+        bComponents = self.getBComponents()
+        i = 0
+        for x in bComponents:
+            updates.append(x.getUpdateRandom(components[i]))
+            i += 1
         
         if len(updates) == 1:
             updates = updates[0]
@@ -228,15 +248,36 @@ class B_UI_Container(B_UI):
                 if len(item_ui) > 0:
                     components += item_ui
             
-            if self.buildResetButton:
-                B_UI_Markdown._buildSeparator()
+            if self.buildResetButton or self.buildRandomButton:
+                def _buildResetButton() -> typing.Any:
+                    btnReset = gr.Button(value = f"Reset {self.name}")
+                    btnReset.click(
+                        fn = self.resetComponentsValues
+                        , outputs = components
+                    )
+                    return btnReset
                 
-                btnReset = gr.Button(value = f"Reset {self.name}")
-                btnReset.click(
-                    fn = self.resetComponentsValues
-                    , inputs = components
-                    , outputs = components
-                )
+                def _buildRandomButton() -> typing.Any:
+                    btnRandom = gr.Button(value = f"Randomize {self.name}")
+                    btnRandom.click(
+                        fn = self.randomizeComponentsValues
+                        , inputs = components
+                        , outputs = components
+                    )
+                    return btnRandom
+                
+                B_UI_Markdown._buildSeparator()
+
+                if self.buildResetButton and self.buildRandomButton:
+                    with gr.Row():
+                        with gr.Column():
+                            _buildRandomButton()
+                        with gr.Column():
+                            _buildResetButton()
+                elif self.buildResetButton:
+                    _buildResetButton()
+                elif self.buildRandomButton:
+                    _buildRandomButton()
         
         return components
     
@@ -414,6 +455,9 @@ class B_UI_Component_Textbox(B_UI_Component):
     def getUpdate(self, value = None) -> typing.Any:
         return gr.Textbox.update(value = self.handleUpdateValue(value))
     
+    def getUpdateRandom(self, currentValue) -> typing.Any:
+        return self.getUpdate(currentValue)
+    
     def finalizeComponent(self, componentMap: dict):
         pass
 
@@ -421,6 +465,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
     empty_choice: str = "-"
     advanced_defaultValue: float = 1
     advanced_step: float = 0.1
+    random_maxChoices: int = 4
 
     @staticmethod
     def _fromArgs(name: str, *args, **kwargs: str):
@@ -720,6 +765,26 @@ class B_UI_Component_Dropdown(B_UI_Component):
     def getUpdate(self, value = None) -> typing.Any:
         return gr.Dropdown.update(value = self.handleUpdateValue(value))
     
+    def getUpdateRandom(self, currentValue) -> typing.Any:
+        value: str | list[str]
+
+        choiceKeys = list(self.choicesMap.keys())
+        
+        if len(choiceKeys) == 0:
+            value = currentValue
+        else:
+            r = random.randint(0, len(choiceKeys) - 1)
+            if self.multiselect:
+                value = []
+
+                for c in range(min(r + 1, self.random_maxChoices)):
+                    i = random.randint(0, len(choiceKeys) - 1)
+                    value.append(choiceKeys.pop(i))
+            else:
+                value = choiceKeys[r]
+        
+        return self.getUpdate(value)
+    
     def finalizeComponent(self, componentMap: dict):
         bComponents: list[B_UI_Component] = list(componentMap.values())
         bComponents.remove(self)
@@ -863,6 +928,10 @@ class B_UI_Component_Slider(B_UI_Component):
     def getUpdate(self, value = None) -> typing.Any:
         return gr.Slider.update(value = self.handleUpdateValue(value))
     
+    def getUpdateRandom(self, currentValue) -> typing.Any:
+        value = float(random.randint(self.getMinimum(), self.getMaximum()))
+        return self.getUpdate(value)
+    
     def finalizeComponent(self, componentMap: dict):
         pass
 
@@ -874,10 +943,11 @@ class B_UI_Container_Tab(B_UI_Container):
             , items = items
             , visible = not bool(int(kwargs.get("hide", 0)))
             , buildResetButton = bool(int(kwargs.get("build_reset_button", 1)))
+            , buildRandomButton = bool(int(kwargs.get("build_random_button", 0)))
         )
     
-    def __init__(self, name: str = None, items: list[B_UI] = [], visible: bool = True, buildResetButton: bool = True):
-        super().__init__(name, items, visible, buildResetButton)
+    def __init__(self, name: str = None, items: list[B_UI] = [], visible: bool = True, buildResetButton: bool = True, buildRandomButton: bool = False):
+        super().__init__(name, items, visible, False, buildResetButton, buildRandomButton)
     
     def getDefaultName(self) -> str:
         return "Tab"
@@ -896,7 +966,7 @@ class B_UI_Container_Row(B_UI_Container):
         )
     
     def __init__(self, items: list[B_UI] = [], visible: bool = True, buildResetButton: bool = False, name: str = None):
-        super().__init__(name, items, visible, buildResetButton)
+        super().__init__(name, items, visible, False, buildResetButton)
     
     def getDefaultName(self) -> str:
         return "Row"
@@ -916,7 +986,7 @@ class B_UI_Container_Column(B_UI_Container):
         )
     
     def __init__(self, items: list[B_UI] = [], scale: int = 1, visible: bool = True, buildResetButton: bool = False, name: str = None):
-        super().__init__(name, items, visible, buildResetButton)
+        super().__init__(name, items, visible, False, buildResetButton)
         
         self.scale = scale
     
@@ -933,11 +1003,12 @@ class B_UI_Container_Group(B_UI_Container):
             items = items
             , visible = not bool(int(kwargs.get("hide", 0)))
             , buildResetButton = bool(int(kwargs.get("build_reset_button", 0)))
+            , buildRandomButton = bool(int(kwargs.get("build_random_button", 0)))
             , name = name
         )
     
-    def __init__(self, items: list[B_UI] = [], visible: bool = True, buildResetButton: bool = False, name: str = None):
-        super().__init__(name, items, visible, buildResetButton)
+    def __init__(self, items: list[B_UI] = [], visible: bool = True, buildResetButton: bool = False, buildRandomButton: bool = False, name: str = None):
+        super().__init__(name, items, visible, False, buildResetButton, buildRandomButton)
     
     def getDefaultName(self) -> str:
         return "Group"
@@ -956,7 +1027,7 @@ class B_UI_Container_Accordion(B_UI_Container):
         )
     
     def __init__(self, name: str = None, items: list[B_UI] = [], visible: bool = True, buildResetButton: bool = False):
-        super().__init__(name, items, visible, buildResetButton)
+        super().__init__(name, items, visible, False, buildResetButton)
     
     def getDefaultName(self) -> str:
         return "Accordion"
