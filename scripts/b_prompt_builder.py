@@ -1,6 +1,7 @@
 import modules.scripts as scripts
 import gradio as gr
 import os
+import typing
 
 from abc import ABC, abstractmethod
 from modules import scripts
@@ -30,6 +31,9 @@ def buildRangePrompt(promptA: str, promptB: str, value: float) -> str:
         
     return f"[{promptB}:{promptA}:{value}]"
 
+def printWarning(component: str, name: str, message: str):
+    print(f"VALIDATE/{component}/{name} -> {message}")
+
 class B_UI(ABC):
     _identifier: int = 0
     
@@ -38,7 +42,7 @@ class B_UI(ABC):
         self.name = self.handleName(name)
         self.visible = visible
 
-        self.ui: any = None
+        self.ui: typing.Any = None
     
     def getNextIdentifier(self) -> int:
         B_UI._identifier += 1
@@ -53,9 +57,13 @@ class B_UI(ABC):
     @abstractmethod
     def getDefaultName(self) -> str:
         pass
+
+    @abstractmethod
+    def validate(self, componentMap: dict) -> bool:
+        pass
     
     @abstractmethod
-    def buildUI(self) -> list[any]:
+    def buildUI(self) -> list[typing.Any]:
         """Returns a list of Gradio components"""
         pass
 
@@ -87,7 +95,10 @@ class B_UI_Markdown(B_UI):
     def getDefaultName(self) -> str:
         return "Markdown"
     
-    def buildUI(self) -> list[any]:
+    def validate(self, componentMap: dict) -> bool:
+        return True
+    
+    def buildUI(self) -> list[typing.Any]:
         markdown = gr.Markdown(
             value = self.value
             , visible = self.visible
@@ -112,16 +123,24 @@ class B_UI_Component(B_UI, ABC):
     def handleUpdateValue(self, value):
         return value if value is not None else self.defaultValue
     
-    def buildUI(self) -> list[any]:
+    def buildUI(self) -> list[typing.Any]:
         self.ui = self.buildComponent()
         return [self.ui]
     
     @abstractmethod
     def getDefaultName(self) -> str:
         pass
+
+    @abstractmethod
+    def validate(self, componentMap: dict) -> bool:
+        pass
+
+    @abstractmethod
+    def validateValue(self, value: typing.Any) -> bool:
+        pass
     
     @abstractmethod
-    def buildComponent(self) -> any:
+    def buildComponent(self) -> typing.Any:
         pass
     
     @abstractmethod
@@ -133,7 +152,7 @@ class B_UI_Component(B_UI, ABC):
         pass
     
     @abstractmethod
-    def getUpdate(self, value = None) -> any:
+    def getUpdate(self, value = None) -> typing.Any:
         pass
 
     @abstractmethod
@@ -179,7 +198,7 @@ class B_UI_Container(B_UI):
         
         return bComponents
     
-    def resetComponentsValues(self, *args) -> any:
+    def resetComponentsValues(self, *args) -> typing.Any:
         updates = []
         
         bComponents = self.getBComponents()
@@ -191,8 +210,15 @@ class B_UI_Container(B_UI):
         
         return updates
     
-    def buildUI(self) -> list[any]:
-        components: list[any] = []
+    def validate(self, componentMap: dict) -> bool:
+        for bUi in self.items:
+            if not bUi.validate(componentMap):
+                return False
+        
+        return True
+    
+    def buildUI(self) -> list[typing.Any]:
+        components: list[typing.Any] = []
         
         self.ui = self.buildContainer()
         with self.ui:
@@ -219,18 +245,18 @@ class B_UI_Container(B_UI):
         pass
     
     @abstractmethod
-    def buildContainer(self) -> any:
+    def buildContainer(self) -> typing.Any:
         pass
 
 class B_UI_Preset():
     @staticmethod
-    def _fromArgs(mappings: dict[str, list[any]], **kwargs: str):
+    def _fromArgs(mappings: dict[str, list[typing.Any]], **kwargs: str):
         return B_UI_Preset(
             mappings = mappings
             , isAdditive = bool(int(kwargs.get("is_additive", 0)))
         )
     
-    def __init__(self, mappings: dict[str, list[any]], isAdditive: bool = False):
+    def __init__(self, mappings: dict[str, list[typing.Any]], isAdditive: bool = False):
         self.mappings = mappings
         self.isAdditive = isAdditive
     
@@ -241,12 +267,25 @@ class B_UI_Preset():
         if not hasPresetValue:
             return bComponent.defaultValue if not self.isAdditive else componentValue
         
-        presetValue: any = self.mappings[component.label]
+        presetValue: typing.Any = self.mappings[component.label]
         
         if type(component) is not gr.Dropdown or not component.multiselect:
             presetValue = bComponent.defaultValue if len(presetValue) == 0 else presetValue[0]
         
         return presetValue
+    
+    def validate(self, name: str, componentMap: dict[str, B_UI_Component]) -> bool:
+        valid: bool = True
+
+        for k in self.mappings:
+            if k not in componentMap:
+                valid = False
+                printWarning("Preset", name, "Key is not valid")
+            elif not componentMap[k].validateValue(self.mappings[k]):
+                valid = False
+                printWarning("Preset", f"{name}: {componentMap[k].name}", "Value is not valid")
+
+        return valid
 
 class B_Prompt(ABC):
     def __init__(self):
@@ -349,7 +388,13 @@ class B_UI_Component_Textbox(B_UI_Component):
     def getDefaultName(self) -> str:
         return "Textbox"
     
-    def buildComponent(self) -> any:
+    def validate(self, componentMap: dict) -> bool:
+        return True
+    
+    def validateValue(self, value: typing.Any) -> bool:
+        return True
+    
+    def buildComponent(self) -> typing.Any:
         return gr.Textbox(
             label = self.name
             , value = self.value
@@ -366,7 +411,7 @@ class B_UI_Component_Textbox(B_UI_Component):
         else:
             p.negative_prompt = addPrompt(p.negative_prompt, self.value)
     
-    def getUpdate(self, value = None) -> any:
+    def getUpdate(self, value = None) -> typing.Any:
         return gr.Textbox.update(value = self.handleUpdateValue(value))
     
     def finalizeComponent(self, componentMap: dict):
@@ -521,7 +566,35 @@ class B_UI_Component_Dropdown(B_UI_Component):
     def getDefaultName(self) -> str:
         return "Dropdown"
     
-    def buildComponent(self) -> list[any]:
+    def validate(self, componentMap: dict) -> bool:
+        valid: bool = True
+
+        for choiceKey in self.choicesMap:
+            if choiceKey == self.empty_choice:
+                continue
+            
+            choiceValue = self.choicesMap[choiceKey]
+            if issubclass(type(choiceValue), B_Prompt_Simple):
+                choiceValue_simple: B_Prompt_Simple = choiceValue
+                if choiceValue_simple.preset is not None and choiceValue_simple.preset.validate(f"{self.name}: {choiceKey}", componentMap):
+                    valid = False
+        
+        return valid
+    
+    def validateValue(self, value: typing.Any) -> bool:
+        valid: bool = True
+
+        if type(value) is not list:
+            value: list = [value]
+        
+        for v in value:
+            if v not in self.choicesMap:
+                valid = False
+                printWarning("Dropdown", self.name, f"Invalid choice: '{v}'")
+
+        return valid
+    
+    def buildComponent(self) -> list[typing.Any]:
         def _build(useScale: bool = True):
             return gr.Dropdown(
                 label = self.name
@@ -537,7 +610,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
         if not self.advanced:
             component = _build()
         else:
-            self.advanced_options: dict[str, tuple[any, any]] = {}
+            self.advanced_options: dict[str, tuple[typing.Any, typing.Any]] = {}
             self.advanced_values: dict[str, float] = {}
             
             with gr.Column(
@@ -644,14 +717,14 @@ class B_UI_Component_Dropdown(B_UI_Component):
                     p.prompt = addPrompt(p.prompt, positive)
                     p.negative_prompt = addPrompt(p.negative_prompt, negative)
     
-    def getUpdate(self, value = None) -> any:
+    def getUpdate(self, value = None) -> typing.Any:
         return gr.Dropdown.update(value = self.handleUpdateValue(value))
     
     def finalizeComponent(self, componentMap: dict):
         bComponents: list[B_UI_Component] = list(componentMap.values())
         bComponents.remove(self)
         
-        components: list[any] = list(map(lambda bComponent: bComponent.ui, bComponents))
+        components: list[typing.Any] = list(map(lambda bComponent: bComponent.ui, bComponents))
 
         anyChoiceMapHasPreset = any(
             map(
@@ -664,7 +737,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
                 if type(choices) is str:
                     choices = [choices]
                 
-                updatedValues: list[any] = list(args)
+                updatedValues: list[typing.Any] = list(args)
                 
                 if len(choices) > 0:
                     for choice in choices:
@@ -724,7 +797,7 @@ class B_UI_Component_Slider(B_UI_Component):
     def getStep(self) -> float:
         return 1
     
-    def buildButton(self, component: any, text: str, value: float) -> any:
+    def buildButton(self, component: typing.Any, text: str, value: float) -> typing.Any:
         btn = gr.Button(value = text)
         btn.click(
             fn = lambda component: self.getUpdate(value)
@@ -736,7 +809,29 @@ class B_UI_Component_Slider(B_UI_Component):
     def getDefaultName(self) -> str:
         return "Slider"
     
-    def buildComponent(self) -> list[any]:
+    def validate(self) -> bool:
+        if self.validateValue(self.defaultValue):
+            return True
+        
+        return False
+    
+    def validateValue(self, value: typing.Any) -> bool:
+        valuePrintStr: str = "Value" if value != self.defaultValue else "Default value"
+
+        value_final: float | None = None
+        if type(value) is list and len(value) > 0:
+            value_final = float(value[0])
+        
+        if value_final is not None and value_final < self.getMinimum():
+            printWarning("Slider", self.name, f"{valuePrintStr} exceeds minimum")
+        elif value_final is not None and value_final > self.getMaximum():
+            printWarning("Slider", self.name, f"{valuePrintStr} exceeds maximum")
+        else:
+            return True
+        
+        return False
+    
+    def buildComponent(self) -> list[typing.Any]:
         slider = gr.Slider(
             label = self.name
             , minimum = self.getMinimum()
@@ -753,7 +848,7 @@ class B_UI_Component_Slider(B_UI_Component):
         
         return slider
     
-    def setValue(self, value: any):
+    def setValue(self, value: typing.Any):
         value = float(value)
         self.value = round(value / self.getMaximum(), 2) if value > -1 else value
     
@@ -765,7 +860,7 @@ class B_UI_Component_Slider(B_UI_Component):
         else:
             p.negative_prompt = addPrompt(p.prompt, promptToAdd)
     
-    def getUpdate(self, value = None) -> any:
+    def getUpdate(self, value = None) -> typing.Any:
         return gr.Slider.update(value = self.handleUpdateValue(value))
     
     def finalizeComponent(self, componentMap: dict):
@@ -787,7 +882,7 @@ class B_UI_Container_Tab(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Tab"
     
-    def buildContainer(self) -> any:
+    def buildContainer(self) -> typing.Any:
         return gr.Tab(self.name)
 
 class B_UI_Container_Row(B_UI_Container):
@@ -806,7 +901,7 @@ class B_UI_Container_Row(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Row"
     
-    def buildContainer(self) -> any:
+    def buildContainer(self) -> typing.Any:
         return gr.Row(visible = self.visible)
 
 class B_UI_Container_Column(B_UI_Container):
@@ -828,7 +923,7 @@ class B_UI_Container_Column(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Column"
     
-    def buildContainer(self) -> any:
+    def buildContainer(self) -> typing.Any:
         return gr.Column(scale = self.scale, visible = self.visible)
 
 class B_UI_Container_Group(B_UI_Container):
@@ -847,7 +942,7 @@ class B_UI_Container_Group(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Group"
     
-    def buildContainer(self) -> any:
+    def buildContainer(self) -> typing.Any:
         return gr.Group(visible = self.visible)
 
 class B_UI_Container_Accordion(B_UI_Container):
@@ -866,7 +961,7 @@ class B_UI_Container_Accordion(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Accordion"
     
-    def buildContainer(self) -> any:
+    def buildContainer(self) -> typing.Any:
         return gr.Accordion(label = self.name, visible = self.visible)
 
 class B_UI_Builder(ABC):
@@ -995,11 +1090,14 @@ class B_UI_Component_Dropdown_Builder(B_UI_Builder):
         return builtSelf
 
 class B_UI_Map():
-    def __init__(self, path_base: str, file_name_layout: str, file_name_presets: str, tagged_show: bool = True):
+    def __init__(self, path_base: str, file_name_layout: str, file_name_presets: str, tagged_show: bool = True, validate: bool = True):
         self.layout = self.parseLayout(os.path.join(path_base, file_name_layout), tagged_show)
         self.presets = self.parsePresets(os.path.join(path_base, file_name_presets))
         
         self.componentMap = self.buildComponentMap()
+
+        if validate:
+            self.validate()
     
     def readLine(self, l: str) -> tuple[str, str, dict[str, str]]:
         # TODO: Fix empty str l_name
@@ -1226,10 +1324,17 @@ class B_UI_Map():
         
         return componentMap
     
-    def buildUI(self) -> list[any]:
+    def validate(self):
+        for bUi in self.layout:
+            bUi.validate(self.componentMap)
+        
+        for presetKey in self.presets:
+            self.presets[presetKey].validate(presetKey, self.componentMap)
+    
+    def buildUI(self) -> list[typing.Any]:
         B_UI_Markdown._buildSeparator()
         
-        components: list[any] = []
+        components: list[typing.Any] = []
         
         for item in self.layout:
             item_ui = item.buildUI()
@@ -1249,7 +1354,7 @@ class B_UI_Map():
             return
         
         bComponents = self.componentMap.values()
-        components: list[any] = list(map(lambda bComponent: bComponent.ui, bComponents))
+        components: list[typing.Any] = list(map(lambda bComponent: bComponent.ui, bComponents))
         
         presetKeys = self.presets.keys()
         
@@ -1277,6 +1382,7 @@ b_layout = B_UI_Map(
     , file_name_layout = "layout.txt"
     , file_name_presets = "presets.txt"
     , tagged_show = True
+    , validate = True
 )
 
 class Script(scripts.Script):
