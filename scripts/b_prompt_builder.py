@@ -1155,6 +1155,9 @@ class B_UI_Component_Dropdown_Builder(B_UI_Builder):
                 preset = preset_builder.build()
                 bPrompt = B_Prompt_Simple._fromArgs(preset, **kwargs)
         
+        if text in self.choicesMap:
+            print(f"WARNING: Duplicate CHOICE in {self.name} -> {text}")
+        
         self.choicesMap[text] = bPrompt
     
     def addChoices(self, **kwargs: str):
