@@ -206,13 +206,17 @@ class B_UI_Container(B_UI):
                 if self.buildResetButton and self.buildRandomButton:
                     with gr.Row():
                         with gr.Column():
-                            _buildRandomButton()
+                            btnRandom = _buildRandomButton()
+                            # built.append(btnRandom)
                         with gr.Column():
-                            _buildResetButton()
+                            btnReset = _buildResetButton()
+                            # built.append(btnReset)
                 elif self.buildResetButton:
-                    _buildResetButton()
+                    btnRandom = _buildResetButton()
+                    # built.append(btnRandom)
                 elif self.buildRandomButton:
-                    _buildRandomButton()
+                    btnReset = _buildRandomButton()
+                    # built.append(btnReset)
         
         return built
     
