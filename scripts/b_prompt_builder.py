@@ -55,18 +55,22 @@ class B_UI(ABC):
         
         return name
     
+    def buildUI(self) -> list[typing.Any]:
+        """Returns a list of Gradio components (first entry is self)"""
+        self.ui = self.buildSelf()
+        return [self.ui]
+    
     @abstractmethod
     def getDefaultName(self) -> str:
         pass
 
     @abstractmethod
-    def validate(self, componentMap: dict) -> bool:
+    def buildSelf(self) -> typing.Any:
         pass
     
-    @abstractmethod
-    def buildUI(self) -> list[typing.Any]:
-        """Returns a list of Gradio components"""
-        pass
+    def validate(self, componentMap: dict) -> bool:
+        """Base function -> True"""
+        return True
 
 class B_UI_Markdown(B_UI):
     html_separator: str = "<hr style=\"margin: 0.5em 0; border-style: dotted; border-color: var(--border-color-primary);\" />"
@@ -93,21 +97,18 @@ class B_UI_Markdown(B_UI):
         
         self.value: str = value
     
+    def buildUI(self) -> list[typing.Any]:
+        super().buildUI()
+        return []
+    
     def getDefaultName(self) -> str:
         return "Markdown"
     
-    def validate(self, componentMap: dict) -> bool:
-        return True
-    
-    def buildUI(self) -> list[typing.Any]:
-        markdown = gr.Markdown(
+    def buildSelf(self) -> typing.Any:
+        return gr.Markdown(
             value = self.value
             , visible = self.visible
         )
-        
-        self.ui = markdown
-
-        return []
 
 class B_UI_Component(B_UI, ABC):
     @staticmethod
@@ -121,28 +122,19 @@ class B_UI_Component(B_UI, ABC):
         self.value = defaultValue
         self.defaultValue = defaultValue
     
+    def getDefaultName(self) -> str:
+        return "Component"
+    
+    def validate(self, componentMap: dict) -> bool:
+        """Base function -> Validates default value"""
+        return self.validateValue(self.defaultValue)
+    
+    def validateValue(self, value: typing.Any) -> bool:
+        """Base function -> True"""
+        return True
+    
     def handleUpdateValue(self, value):
         return value if value is not None else self.defaultValue
-    
-    def buildUI(self) -> list[typing.Any]:
-        self.ui = self.buildComponent()
-        return [self.ui]
-    
-    @abstractmethod
-    def getDefaultName(self) -> str:
-        pass
-
-    @abstractmethod
-    def validate(self, componentMap: dict) -> bool:
-        pass
-
-    @abstractmethod
-    def validateValue(self, value: typing.Any) -> bool:
-        pass
-    
-    @abstractmethod
-    def buildComponent(self) -> typing.Any:
-        pass
     
     @abstractmethod
     def setValue(self, value):
@@ -178,6 +170,61 @@ class B_UI_Container(B_UI):
         self.buildRandomButton = buildRandomButton
 
         self.bComponents = self.getBComponents()
+    
+    def buildUI(self) -> list[typing.Any]:
+        super().buildUI()
+
+        built: list[typing.Any] = []
+        
+        with self.ui:
+            for item in self.items:
+                item_ui = item.buildUI()
+                
+                if len(item_ui) > 0:
+                    built += item_ui
+            
+            if self.buildResetButton or self.buildRandomButton:
+                def _buildResetButton() -> typing.Any:
+                    btnReset = gr.Button(value = f"Reset {self.name}")
+                    btnReset.click(
+                        fn = self.resetComponentsValues
+                        , outputs = built
+                    )
+                    return btnReset
+                
+                def _buildRandomButton() -> typing.Any:
+                    btnRandom = gr.Button(value = f"Randomize {self.name}")
+                    btnRandom.click(
+                        fn = self.randomizeComponentsValues
+                        , inputs = built
+                        , outputs = built
+                    )
+                    return btnRandom
+                
+                B_UI_Markdown._buildSeparator()
+
+                if self.buildResetButton and self.buildRandomButton:
+                    with gr.Row():
+                        with gr.Column():
+                            _buildRandomButton()
+                        with gr.Column():
+                            _buildResetButton()
+                elif self.buildResetButton:
+                    _buildResetButton()
+                elif self.buildRandomButton:
+                    _buildRandomButton()
+        
+        return built
+    
+    def getDefaultName(self) -> str:
+        return "Container"
+    
+    def validate(self, componentMap: dict) -> bool:
+        for bUi in self.items:
+            if not bUi.validate(componentMap):
+                return False
+        
+        return True
     
     def handleItems(self, items: list[B_UI], buildCustomPromptInputs: bool, prefix: str) -> list[B_UI]:
         if buildCustomPromptInputs:
@@ -229,65 +276,6 @@ class B_UI_Container(B_UI):
             updates = updates[0]
         
         return updates
-    
-    def validate(self, componentMap: dict) -> bool:
-        for bUi in self.items:
-            if not bUi.validate(componentMap):
-                return False
-        
-        return True
-    
-    def buildUI(self) -> list[typing.Any]:
-        components: list[typing.Any] = []
-        
-        self.ui = self.buildContainer()
-        with self.ui:
-            for item in self.items:
-                item_ui = item.buildUI()
-                
-                if len(item_ui) > 0:
-                    components += item_ui
-            
-            if self.buildResetButton or self.buildRandomButton:
-                def _buildResetButton() -> typing.Any:
-                    btnReset = gr.Button(value = f"Reset {self.name}")
-                    btnReset.click(
-                        fn = self.resetComponentsValues
-                        , outputs = components
-                    )
-                    return btnReset
-                
-                def _buildRandomButton() -> typing.Any:
-                    btnRandom = gr.Button(value = f"Randomize {self.name}")
-                    btnRandom.click(
-                        fn = self.randomizeComponentsValues
-                        , inputs = components
-                        , outputs = components
-                    )
-                    return btnRandom
-                
-                B_UI_Markdown._buildSeparator()
-
-                if self.buildResetButton and self.buildRandomButton:
-                    with gr.Row():
-                        with gr.Column():
-                            _buildRandomButton()
-                        with gr.Column():
-                            _buildResetButton()
-                elif self.buildResetButton:
-                    _buildResetButton()
-                elif self.buildRandomButton:
-                    _buildRandomButton()
-        
-        return components
-    
-    @abstractmethod
-    def getDefaultName(self) -> str:
-        pass
-    
-    @abstractmethod
-    def buildContainer(self) -> typing.Any:
-        pass
 
 class B_UI_Preset():
     @staticmethod
@@ -445,13 +433,7 @@ class B_UI_Component_Textbox(B_UI_Component):
     def getDefaultName(self) -> str:
         return "Textbox"
     
-    def validate(self, componentMap: dict) -> bool:
-        return True
-    
-    def validateValue(self, value: typing.Any) -> bool:
-        return True
-    
-    def buildComponent(self) -> typing.Any:
+    def buildSelf(self) -> typing.Any:
         return gr.Textbox(
             label = self.name
             , value = self.value
@@ -551,6 +533,141 @@ class B_UI_Component_Dropdown(B_UI_Component):
         self.hideLabel = hideLabel
         self.scale = scale
     
+    def getDefaultName(self) -> str:
+        return "Dropdown"
+    
+    def buildUI(self) -> list[typing.Any]:
+        if not self.advanced:
+            return super().buildUI()
+        
+        built: list[typing.Any] = []
+
+        self.advanced_options: dict[str, tuple[typing.Any, typing.Any]] = {}
+        self.advanced_values: dict[str, float] = {}
+
+        choices = self.getChoices()
+        
+        with gr.Column(
+            scale = self.scale
+            , min_width = 160
+        ):
+            built += super().buildUI()
+
+            row = gr.Row(
+                variant = "panel"
+                , visible = self.value is not None and len(self.value) > 0 and self.value != self.empty_choice
+            )
+            with row:
+                for k in choices:
+                    if k == self.empty_choice:
+                        continue
+
+                    column = gr.Column(
+                        variant = "panel"
+                        , visible = self.value is not None and (self.value == k or k in self.value)
+                        , min_width = 160
+                    )
+                    with column:
+                        markdown = gr.Markdown(
+                            value = f"{k}"
+                            , visible = False
+                        )
+
+                        number = gr.Number(
+                            label = f"{k} (S)"
+                            , value = self.advanced_defaultValue
+                            , step = self.advanced_step
+                            , minimum = 0
+                        )
+                        number.input(
+                            fn = self.setAdvancedValue
+                            , inputs = [markdown, number]
+                        )
+
+                        # built.append(number)
+                    
+                    self.advanced_options[k] = number, column
+                    self.advanced_values[k] = self.advanced_defaultValue
+        
+        self.advanced_container = row
+        
+        def _update(choice: str | list[str]):
+            outputMap: dict[str, bool] = {}
+
+            for k in choices:
+                if k == self.empty_choice:
+                    continue
+                
+                outputMap[k] = False
+            
+            choices_selected: list[str] = []
+            if type(choice) is str:
+                choices_selected.append(choice)
+            else:
+                choices_selected += choice
+            
+            for k in choices_selected:
+                if k == self.empty_choice:
+                    continue
+                
+                outputMap[k] = True
+            
+            output: list = [self.advanced_container.update(visible = any(list(outputMap.values())))]
+            for k in outputMap:
+                self.advanced_values[k] = self.advanced_defaultValue
+                output.append(self.advanced_options[k][0].update(value = self.advanced_values[k], step = self.advanced_step))
+                output.append(self.advanced_options[k][1].update(visible = outputMap[k]))
+            
+            return output
+
+        self.ui.change(
+            fn = _update
+            , inputs = self.ui
+            , outputs = [self.advanced_container] + sum(list(map(lambda t: list(t), self.advanced_options.values())), [])
+        )
+
+        return built
+    
+    def buildSelf(self) -> typing.Any:
+        return gr.Dropdown(
+            label = self.name
+            , choices = self.getChoices()
+            , multiselect = self.multiselect
+            , value = self.value
+            , allow_custom_value = self.allowCustomValues
+            , show_label = not self.hideLabel
+            , scale = self.scale if not self.advanced else None
+            , visible = self.visible
+        )
+    
+    def validate(self, componentMap: dict) -> bool:
+        valid = super().validate(componentMap)
+
+        for choiceKey in self.choicesMap:
+            if choiceKey == self.empty_choice:
+                continue
+            
+            choiceValue = self.choicesMap[choiceKey]
+            if issubclass(type(choiceValue), B_Prompt_Simple):
+                choiceValue_simple: B_Prompt_Simple = choiceValue
+                if choiceValue_simple.preset is not None and choiceValue_simple.preset.validate(f"{self.name}: {choiceKey}", componentMap):
+                    valid = False
+        
+        return valid
+    
+    def validateValue(self, value: typing.Any) -> bool:
+        valid: bool = True
+
+        if type(value) is not list:
+            value: list = [value]
+        
+        for v in value:
+            if v not in self.choicesMap:
+                valid = False
+                printWarning("Dropdown", self.name, f"Invalid choice: '{v}'")
+
+        return valid
+    
     def buildChoicesMap(self, choicesMap: dict[str, B_Prompt], insertEmptyChoice: bool) -> dict[str, B_Prompt]:
         choicesMapFinal = choicesMap
         
@@ -618,134 +735,6 @@ class B_UI_Component_Dropdown(B_UI_Component):
     
     def setAdvancedValue(self, choice: str, value: float):
         self.advanced_values[choice] = value
-    
-    def getDefaultName(self) -> str:
-        return "Dropdown"
-    
-    def validate(self, componentMap: dict) -> bool:
-        valid: bool = True
-
-        for choiceKey in self.choicesMap:
-            if choiceKey == self.empty_choice:
-                continue
-            
-            choiceValue = self.choicesMap[choiceKey]
-            if issubclass(type(choiceValue), B_Prompt_Simple):
-                choiceValue_simple: B_Prompt_Simple = choiceValue
-                if choiceValue_simple.preset is not None and choiceValue_simple.preset.validate(f"{self.name}: {choiceKey}", componentMap):
-                    valid = False
-        
-        return valid
-    
-    def validateValue(self, value: typing.Any) -> bool:
-        valid: bool = True
-
-        if type(value) is not list:
-            value: list = [value]
-        
-        for v in value:
-            if v not in self.choicesMap:
-                valid = False
-                printWarning("Dropdown", self.name, f"Invalid choice: '{v}'")
-
-        return valid
-    
-    def buildComponent(self) -> list[typing.Any]:
-        def _build(useScale: bool = True):
-            return gr.Dropdown(
-                label = self.name
-                , choices = self.getChoices()
-                , multiselect = self.multiselect
-                , value = self.value
-                , allow_custom_value = self.allowCustomValues
-                , show_label = not self.hideLabel
-                , scale = self.scale if useScale else None
-                , visible = self.visible
-            )
-
-        if not self.advanced:
-            component = _build()
-        else:
-            self.advanced_options: dict[str, tuple[typing.Any, typing.Any]] = {}
-            self.advanced_values: dict[str, float] = {}
-            
-            with gr.Column(
-                scale = self.scale
-                , min_width = 160
-            ):
-                component = _build(False)
-                row = gr.Row(
-                    variant = "panel"
-                    , visible = self.value is not None and len(self.value) > 0 and self.value != self.empty_choice
-                )
-                with row:
-                    for k in self.choicesMap:
-                        if k == self.empty_choice:
-                            continue
-
-                        column = gr.Column(
-                            variant = "panel"
-                            , visible = self.value is not None and (self.value == k or k in self.value)
-                            , min_width = 160
-                        )
-                        with column:
-                            markdown = gr.Markdown(
-                                value = f"{k}"
-                                , visible = False
-                            )
-
-                            number = gr.Number(
-                                label = f"{k} (S)"
-                                , value = self.advanced_defaultValue
-                                , step = self.advanced_step
-                                , minimum = 0
-                            )
-                            number.input(
-                                fn = self.setAdvancedValue
-                                , inputs = [markdown, number]
-                            )
-                        
-                        self.advanced_options[k] = number, column
-                        self.advanced_values[k] = self.advanced_defaultValue
-            
-            self.advanced_container = row
-            
-            def _update(choice: str | list[str]):
-                outputMap: dict[str, bool] = {}
-
-                for k in self.choicesMap:
-                    if k == self.empty_choice:
-                        continue
-                    
-                    outputMap[k] = False
-                
-                choices: list[str] = []
-                if type(choice) is str:
-                    choices.append(choice)
-                else:
-                    choices += choice
-                
-                for k in choices:
-                    if k == self.empty_choice:
-                        continue
-                    
-                    outputMap[k] = True
-                
-                output: list = [self.advanced_container.update(visible = any(list(outputMap.values())))]
-                for k in outputMap:
-                    self.advanced_values[k] = self.advanced_defaultValue
-                    output.append(self.advanced_options[k][0].update(value = self.advanced_values[k], step = self.advanced_step))
-                    output.append(self.advanced_options[k][1].update(visible = outputMap[k]))
-                
-                return output
-
-            component.change(
-                fn = _update
-                , inputs = component
-                , outputs = [self.advanced_container] + sum(list(map(lambda t: list(t), self.advanced_options.values())), [])
-            )
-        
-        return component
     
     def setValue(self, value):
         self.value = value
@@ -870,32 +859,34 @@ class B_UI_Component_Slider(B_UI_Component):
         
         self.isNegativePrompt = False
     
-    def getMinimum(self) -> float:
-        return -1 if not self.isRequired else 0
-    
-    def getMaximum(self) -> float:
-        return 100
-    
-    def getStep(self) -> float:
-        return 1
-    
-    def buildButton(self, component: typing.Any, text: str, value: float) -> typing.Any:
-        btn = gr.Button(value = text)
-        btn.click(
-            fn = lambda component: self.getUpdate(value)
-            , inputs = component
-            , outputs = component
-        )
-        return btn
-    
     def getDefaultName(self) -> str:
         return "Slider"
     
-    def validate(self) -> bool:
-        if self.validateValue(self.defaultValue):
-            return True
-        
-        return False
+    def buildUI(self) -> list[typing.Any]:
+        super().buildUI()
+
+        built: list[typing.Any] = []
+        built.append(self.ui)
+
+        if self.buildButtons:
+            with gr.Row():
+                button_promptA = self.buildButton(self.ui, self.promptAButton, 0)
+                button_promptB = self.buildButton(self.ui, self.promptBButton, self.getMaximum())
+
+                # built.append(button_promptA)
+                # built.append(button_promptB)
+
+        return built
+
+    def buildSelf(self) -> typing.Any:
+        return gr.Slider(
+            label = self.name
+            , minimum = self.getMinimum()
+            , maximum = self.getMaximum()
+            , value = self.value
+            , step = self.getStep()
+            , visible = self.visible
+        )
     
     def validateValue(self, value: typing.Any) -> bool:
         valuePrintStr: str = "Value" if value != self.defaultValue else "Default value"
@@ -913,22 +904,23 @@ class B_UI_Component_Slider(B_UI_Component):
         
         return False
     
-    def buildComponent(self) -> list[typing.Any]:
-        slider = gr.Slider(
-            label = self.name
-            , minimum = self.getMinimum()
-            , maximum = self.getMaximum()
-            , value = self.value
-            , step = self.getStep()
-            , visible = self.visible
+    def getMinimum(self) -> float:
+        return -1 if not self.isRequired else 0
+    
+    def getMaximum(self) -> float:
+        return 100
+    
+    def getStep(self) -> float:
+        return 1
+    
+    def buildButton(self, component: typing.Any, text: str, value: float) -> typing.Any:
+        btn = gr.Button(value = text)
+        btn.click(
+            fn = lambda component: self.getUpdate(value)
+            , inputs = component
+            , outputs = component
         )
-        
-        if self.buildButtons:
-            with gr.Row():
-                self.buildButton(slider, self.promptAButton, 0)
-                self.buildButton(slider, self.promptBButton, self.getMaximum())
-        
-        return slider
+        return btn
     
     def setValue(self, value: typing.Any):
         value = float(value)
@@ -969,7 +961,7 @@ class B_UI_Container_Tab(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Tab"
     
-    def buildContainer(self) -> typing.Any:
+    def buildSelf(self) -> typing.Any:
         return gr.Tab(self.name)
 
 class B_UI_Container_Row(B_UI_Container):
@@ -988,7 +980,7 @@ class B_UI_Container_Row(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Row"
     
-    def buildContainer(self) -> typing.Any:
+    def buildSelf(self) -> typing.Any:
         return gr.Row(visible = self.visible)
 
 class B_UI_Container_Column(B_UI_Container):
@@ -1010,7 +1002,7 @@ class B_UI_Container_Column(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Column"
     
-    def buildContainer(self) -> typing.Any:
+    def buildSelf(self) -> typing.Any:
         return gr.Column(scale = self.scale, visible = self.visible)
 
 class B_UI_Container_Group(B_UI_Container):
@@ -1030,7 +1022,7 @@ class B_UI_Container_Group(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Group"
     
-    def buildContainer(self) -> typing.Any:
+    def buildSelf(self) -> typing.Any:
         return gr.Group(visible = self.visible)
 
 class B_UI_Container_Accordion(B_UI_Container):
@@ -1049,7 +1041,7 @@ class B_UI_Container_Accordion(B_UI_Container):
     def getDefaultName(self) -> str:
         return "Accordion"
     
-    def buildContainer(self) -> typing.Any:
+    def buildSelf(self) -> typing.Any:
         return gr.Accordion(label = self.name, visible = self.visible)
 
 class B_UI_Builder(ABC):
