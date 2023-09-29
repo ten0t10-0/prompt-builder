@@ -647,14 +647,14 @@ class B_UI_Component_Dropdown(B_UI_Component):
                     self.advanced_options[k] = number, column
                     self.advanced_values[k] = self.advanced_defaultValue
         
-        def _update(choice: str | list[str]):
-            outputMap: dict[str, bool] = {}
+        def _update(choice: str | list[str], *numbers):
+            columnVisibleMap: dict[str, bool] = {}
 
             for k in choices:
                 if k == self.empty_choice:
                     continue
                 
-                outputMap[k] = False
+                columnVisibleMap[k] = False
             
             choices_selected: list[str] = []
             if type(choice) is not list:
@@ -666,19 +666,25 @@ class B_UI_Component_Dropdown(B_UI_Component):
                 if k == self.empty_choice:
                     continue
                 
-                outputMap[k] = True
+                columnVisibleMap[k] = True
             
-            output: list = [self.advanced_container.update(visible = any(list(outputMap.values())))]
-            for k in outputMap:
-                self.advanced_values[k] = self.advanced_defaultValue
+            output: list = [self.advanced_container.update(visible = any(list(columnVisibleMap.values())))]
+            i: int = 0
+            for k in columnVisibleMap:
+                if columnVisibleMap[k]:
+                    self.advanced_values[k] = numbers[i]
+                else:
+                    self.advanced_values[k] = self.advanced_defaultValue
+                
                 output.append(self.advanced_options[k][0].update(value = self.advanced_values[k], step = self.advanced_step))
-                output.append(self.advanced_options[k][1].update(visible = outputMap[k]))
+                output.append(self.advanced_options[k][1].update(visible = columnVisibleMap[k]))
+                i += 1
             
             return output
-
+        
         self.ui.change(
             fn = _update
-            , inputs = self.ui
+            , inputs = [self.ui, *map(lambda t: t[0], self.advanced_options.values())]
             , outputs = [self.advanced_container] + sum(list(map(lambda t: list(t), self.advanced_options.values())), [])
         )
 
