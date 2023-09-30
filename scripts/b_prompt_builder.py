@@ -396,8 +396,8 @@ class B_UI_Preset(B_UI):
         return presetValue
 
 class B_Prompt(ABC):
-    def __init__(self):
-        pass
+    def __init__(self, name: str):
+        self.name = name
     
     @abstractmethod
     def getPositive(self, componentMap: dict[str, B_UI_Component]) -> str:
@@ -409,21 +409,18 @@ class B_Prompt(ABC):
 
 class B_Prompt_Simple(B_Prompt):
     @staticmethod
-    def _fromArgs(preset: B_UI_Preset, **kwargs: str):
+    def _fromArgs(name: str, preset: B_UI_Preset, **kwargs: str):
         return B_Prompt_Simple(
-            preset = preset
+            name = name
+            , preset = preset
             , promptPositive = kwargs.get("p", "")
             , promptNegative = kwargs.get("n", "")
             , prefix = kwargs.get("prefix", "")
             , postfix = kwargs.get("postfix", "")
         )
     
-    @staticmethod
-    def _createEmpty():
-        return B_Prompt_Simple("", "")
-    
-    def __init__(self, promptPositive: str = "", promptNegative: str = "", prefix: str = "", postfix: str = "", preset: B_UI_Preset = None):
-        super().__init__()
+    def __init__(self, name: str, promptPositive: str = "", promptNegative: str = "", prefix: str = "", postfix: str = "", preset: B_UI_Preset = None):
+        super().__init__(name)
 
         self.positive = self.initPrompt(promptPositive, prefix, postfix)
         self.negative = self.initPrompt(promptNegative, prefix, postfix)
@@ -451,15 +448,16 @@ class B_Prompt_Simple(B_Prompt):
 
 class B_Prompt_Link_Slider(B_Prompt):
     @staticmethod
-    def _fromArgs(**kwargs: str):
+    def _fromArgs(name: str, **kwargs: str):
         return B_Prompt_Link_Slider(
-            linkedKey = kwargs["link_target"]
+            name = name
+            , linkedKey = kwargs["link_target"]
             , promptA = kwargs["a"]
             , promptB = kwargs["b"]
         )
     
-    def __init__(self, linkedKey: str, promptA: str, promptB: str):
-        super().__init__()
+    def __init__(self, name: str, linkedKey: str, promptA: str, promptB: str):
+        super().__init__(name)
 
         self.linkedKey = linkedKey
         self.promptA = promptA
@@ -546,7 +544,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
 
     @staticmethod
     def _fromArgs(name: str, *args, **kwargs: str) -> B_UI:
-        choicesMap: dict[str, B_Prompt] = args[0]
+        choicesList: list[B_Prompt] = args[0]
 
         defaultValues = kwargs.get("v", "")
         if len(defaultValues) > 0:
@@ -554,7 +552,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
         
         return B_UI_Component_Dropdown(
             name = name
-            , choicesMap = choicesMap
+            , choicesList = choicesList
             , defaultValues = defaultValues
             , multiselect = bool(int(kwargs.get("multi_select", 0)))
             , allowCustomValues = bool(int(kwargs.get("allow_custom", 1)))
@@ -566,30 +564,33 @@ class B_UI_Component_Dropdown(B_UI_Component):
         )
     
     @staticmethod
-    def _buildColorChoicesMap(postfixPrompt: str = "") -> dict[str, B_Prompt_Simple]:
-        return {
-            "Dark": B_Prompt_Simple(f"dark", postfix = postfixPrompt)
-            , "Light": B_Prompt_Simple(f"light", postfix = postfixPrompt)
-            , "Black": B_Prompt_Simple(f"black", postfix = postfixPrompt)
-            , "Grey": B_Prompt_Simple(f"grey", postfix = postfixPrompt)
-            , "White": B_Prompt_Simple(f"white", postfix = postfixPrompt)
-            , "Brown": B_Prompt_Simple(f"brown", postfix = postfixPrompt)
-            , "Blue": B_Prompt_Simple(f"blue", postfix = postfixPrompt)
-            , "Green": B_Prompt_Simple(f"green", postfix = postfixPrompt)
-            , "Red": B_Prompt_Simple(f"red", postfix = postfixPrompt)
-            , "Blonde": B_Prompt_Simple(f"blonde", postfix = postfixPrompt)
-            , "Rainbow": B_Prompt_Simple(f"rainbow", postfix = postfixPrompt)
-            , "Pink": B_Prompt_Simple(f"pink", postfix = postfixPrompt)
-            , "Purple": B_Prompt_Simple(f"purple", postfix = postfixPrompt)
-            , "Orange": B_Prompt_Simple(f"orange", postfix = postfixPrompt)
-            , "Yellow": B_Prompt_Simple(f"yellow", postfix = postfixPrompt)
-            , "Multicolored": B_Prompt_Simple(f"multicolored", postfix = postfixPrompt)
-        }
+    def _buildColorChoicesList(postfixPrompt: str = "") -> list[B_Prompt_Simple]:
+        return list(map(
+            lambda text: B_Prompt_Simple(text, text.lower(), postfix = postfixPrompt)
+            , [
+                "Dark"
+                , "Light"
+                , "Black"
+                , "Grey"
+                , "White"
+                , "Brown"
+                , "Blue"
+                , "Green"
+                , "Red"
+                , "Blonde"
+                , "Rainbow"
+                , "Pink"
+                , "Purple"
+                , "Orange"
+                , "Yellow"
+                , "Multicolored"
+            ]
+        ))
     
     def __init__(
         self
         , name: str = None
-        , choicesMap: dict[str, B_Prompt] = {}
+        , choicesList: list[B_Prompt] = []
         , defaultValues: str | list[str] = None
         , multiselect: bool = False
         , allowCustomValues: bool = True
@@ -599,15 +600,14 @@ class B_UI_Component_Dropdown(B_UI_Component):
         , scale: int = None
         , visible: bool = True
     ):
-        choicesMapFinal = self.buildChoicesMap(choicesMap, not multiselect)
-        defaultValueFinal = self.buildDefaultValue(choicesMap, defaultValues, multiselect, list(choicesMapFinal)[0])
+        choicesMap = self.buildChoicesMap(choicesList, not multiselect, sortChoices)
+        defaultValuesFinal = self.buildDefaultValue(choicesMap, defaultValues, multiselect)
         
-        super().__init__(name, defaultValueFinal, visible)
+        super().__init__(name, defaultValuesFinal, visible)
         
-        self.choicesMap = choicesMapFinal
+        self.choicesMap = choicesMap
         self.multiselect = multiselect
         self.allowCustomValues = allowCustomValues if not multiselect else False
-        self.sortChoices = sortChoices
         self.advanced = advanced
         self.hideLabel = hideLabel
         self.scale = scale
@@ -628,7 +628,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
         self.advanced_options = {}
         self.advanced_values = {}
 
-        choices = self.getChoices()
+        choices = self.getChoices(True)
         
         with gr.Column(
             scale = self.scale
@@ -642,9 +642,6 @@ class B_UI_Component_Dropdown(B_UI_Component):
             )
             with self.advanced_container:
                 for k in choices:
-                    if k == self.empty_choice:
-                        continue
-
                     column = gr.Column(
                         variant = "panel"
                         , visible = self.value is not None and (self.value == k or k in self.value)
@@ -668,37 +665,25 @@ class B_UI_Component_Dropdown(B_UI_Component):
                     self.advanced_options[k] = number, column
                     self.advanced_values[k] = self.advanced_defaultValue
         
-        def _update(choice: str | list[str], *numbers):
-            columnVisibleMap: dict[str, bool] = {}
-
-            for k in choices:
-                if k == self.empty_choice:
-                    continue
-                
-                columnVisibleMap[k] = False
-            
+        def _update(choice: str | list[str], *numbers: float):
             choices_selected: list[str] = []
-            if type(choice) is not list:
-                choices_selected.append(choice)
-            else:
-                choices_selected += choice
             
-            for k in choices_selected:
-                if k == self.empty_choice:
-                    continue
-                
-                columnVisibleMap[k] = True
-            
-            output: list = [self.advanced_container.update(visible = any(list(columnVisibleMap.values())))]
-            i: int = 0
-            for k in columnVisibleMap:
-                if columnVisibleMap[k]:
-                    self.advanced_values[k] = numbers[i]
+            if choice != self.empty_choice:
+                if type(choice) is not list:
+                    choices_selected.append(choice)
                 else:
-                    self.advanced_values[k] = self.advanced_defaultValue
+                    choices_selected += choice
+            
+            output: list = [self.advanced_container.update(visible = len(choices_selected) > 0)]
+            i: int = 0
+            for k in self.advanced_values:
+                visible: bool = k in choices_selected
+                value: float = numbers[i] if visible else self.advanced_defaultValue
                 
-                output.append(self.advanced_options[k][0].update(value = self.advanced_values[k], step = self.advanced_step))
-                output.append(self.advanced_options[k][1].update(visible = columnVisibleMap[k]))
+                self.advanced_values[k] = value
+                
+                output.append(self.advanced_options[k][0].update(value = value, step = self.advanced_step))
+                output.append(self.advanced_options[k][1].update(visible = visible))
                 i += 1
             
             return output
@@ -743,14 +728,11 @@ class B_UI_Component_Dropdown(B_UI_Component):
     def validate(self, componentMap: dict) -> bool:
         valid = super().validate(componentMap)
 
-        for choiceKey in self.choicesMap:
-            if choiceKey == self.empty_choice:
-                continue
-            
-            choiceValue = self.choicesMap[choiceKey]
-            if issubclass(type(choiceValue), B_Prompt_Simple):
-                choiceValue_simple: B_Prompt_Simple = choiceValue
-                if choiceValue_simple.preset is not None and not choiceValue_simple.preset.validate(componentMap):
+        for choiceKey in self.getChoices(True):
+            bPrompt = self.choicesMap[choiceKey]
+            if issubclass(type(bPrompt), B_Prompt_Simple):
+                bPrompt_simple: B_Prompt_Simple = bPrompt
+                if bPrompt_simple.preset is not None and not bPrompt_simple.preset.validate(componentMap):
                     valid = False
         
         return valid
@@ -759,7 +741,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
         valid: bool = True
 
         if type(value) is not list:
-            value: list = [value]
+            value: list[str] = [value]
         
         for v in value:
             if v not in self.choicesMap:
@@ -793,14 +775,17 @@ class B_UI_Component_Dropdown(B_UI_Component):
                     for choice in choices:
                         bPrompt = self.choicesMap[choice]
                         
-                        if not issubclass(type(bPrompt), B_Prompt_Simple) or bPrompt.preset == None:
+                        if not issubclass(type(bPrompt), B_Prompt_Simple):
                             continue
                         
-                        bPrompt: B_Prompt_Simple = bPrompt
+                        bPrompt_simple: B_Prompt_Simple = bPrompt
+
+                        if bPrompt_simple.preset == None:
+                            continue
                         
                         i = 0
                         for bComponent in bComponents:
-                            updatedValues[i] = bPrompt.preset.getPresetValue(bComponent, updatedValues[i])
+                            updatedValues[i] = bPrompt_simple.preset.getPresetValue(bComponent, updatedValues[i])
                             i += 1
                 
                 return updatedValues
@@ -811,19 +796,21 @@ class B_UI_Component_Dropdown(B_UI_Component):
                 , outputs = components
             )
     
-    def buildChoicesMap(self, choicesMap: dict[str, B_Prompt], insertEmptyChoice: bool) -> dict[str, B_Prompt]:
-        choicesMapFinal = choicesMap
+    def buildChoicesMap(self, choicesList: list[B_Prompt], insertEmptyChoice: bool, sortChoices: bool) -> dict[str, B_Prompt]:
+        choicesMap: dict[str, B_Prompt] = {}
         
         if insertEmptyChoice:
-            choicesMapFinal = {
-                self.empty_choice: B_Prompt_Simple._createEmpty()
-            }
-            
-            choicesMapFinal.update(choicesMap)
+            choicesMap[self.empty_choice] = B_Prompt_Simple(self.empty_choice)
         
-        return choicesMapFinal
+        if sortChoices:
+            choicesList = sorted(choicesList, key = lambda bPrompt: bPrompt.name)
+        
+        for bPrompt in choicesList:
+            choicesMap[bPrompt.name] = bPrompt
+        
+        return choicesMap
     
-    def buildDefaultValue(self, choicesMap: dict[str, B_Prompt], defaultValues: str | list[str], multiselect: bool, fallbackValue: str) -> str | list[str]:
+    def buildDefaultValue(self, choicesMap: dict[str, B_Prompt], defaultValues: str | list[str], multiselect: bool) -> str | list[str]:
         defaultValue: str | list[str] = None if not multiselect else []
         
         if (type(defaultValues) is str or defaultValues is None):
@@ -833,7 +820,6 @@ class B_UI_Component_Dropdown(B_UI_Component):
             choices = list(choicesMap)
             if multiselect:
                 if defaultValues[0] is not None:
-                    defaultValue = []
                     for v in defaultValues:
                         if v in choices:
                             defaultValue.append(v)
@@ -842,37 +828,26 @@ class B_UI_Component_Dropdown(B_UI_Component):
                 if defaultValueFirst is not None and defaultValueFirst in choices:
                     defaultValue = defaultValueFirst
                 else:
-                    defaultValue = fallbackValue
+                    defaultValue = choices[0]
         
         return defaultValue
     
-    def getChoices(self) -> list[str]:
+    def getChoices(self, excludeEmpty: bool = False) -> list[str]:
         choices = list(self.choicesMap)
         
-        if not self.sortChoices:
-            return choices
+        if excludeEmpty and len(choices) > 0 and choices[0] == self.empty_choice:
+            choices.pop(0)
         
-        choicesSorted: list[str] = []
-        
-        if choices[0] == self.empty_choice:
-            choicesSorted.append(choices.pop(0))
-        
-        choices.sort()
-        choicesSorted += choices
-        
-        return choicesSorted
+        return choices
     
-    def getBPromptsFromValue(self) -> list[tuple[str, B_Prompt]]:
-        bPrompts: list[tuple[str, B_Prompt]] = []
+    def getBPromptsFromValue(self) -> list[B_Prompt]:
+        bPrompts: list[B_Prompt] = []
         
         if type(self.value) is str:
-            bPrompts.append((self.value, self.choicesMap.get(self.value, None if not self.allowCustomValues else B_Prompt_Simple(self.value))))
+            bPrompts.append(self.choicesMap.get(self.value, None if not self.allowCustomValues else B_Prompt_Simple(self.value, self.value)))
         elif type(self.value) is list and len(self.value) > 0:
-            for k in list(self.choicesMap):
-                if k not in self.value:
-                    continue
-                
-                bPrompts.append((k, self.choicesMap[k]))
+            for k in self.value:
+                bPrompts.append(self.choicesMap[k])
         
         return bPrompts
     
@@ -910,12 +885,12 @@ class B_UI_Component_Dropdown(B_UI_Component):
 
         bPrompts = self.getBPromptsFromValue()
         if len(bPrompts) > 0:
-            for choice, bPrompt in bPrompts:
+            for bPrompt in bPrompts:
                 positive = bPrompt.getPositive(componentMap)
                 negative = bPrompt.getNegative(componentMap)
                 
-                if self.advanced and choice != self.empty_choice:
-                    value = self.advanced_values[choice]
+                if self.advanced and bPrompt.name != self.empty_choice:
+                    value = self.advanced_values[bPrompt.name]
                     
                     if value <= 0:
                         continue
@@ -1235,7 +1210,7 @@ class B_UI_Component_Dropdown_Builder(B_UI_Builder_WithParent):
     def __init__(self, name: str, parent: B_UI_Container_Builder, **kwargs: str):
         super().__init__(name, parent, **kwargs)
         
-        self.choicesMap: dict[str, B_Prompt] = {}
+        self.choicesList: list[B_Prompt] = []
     
     def addChoice(self, text: str, preset_builder: B_UI_Preset_Builder, **bPromptKwargs: str):
         bPrompt: B_Prompt = None
@@ -1243,30 +1218,30 @@ class B_UI_Component_Dropdown_Builder(B_UI_Builder_WithParent):
         link_type = bPromptKwargs.get("link_type", "")
         match link_type:
             case "SLIDER":
-                bPrompt = B_Prompt_Link_Slider._fromArgs(**bPromptKwargs)
+                bPrompt = B_Prompt_Link_Slider._fromArgs(text, **bPromptKwargs)
             case _:
                 preset: B_UI_Preset = preset_builder.build()
-                bPrompt = B_Prompt_Simple._fromArgs(preset, **bPromptKwargs)
+                bPrompt = B_Prompt_Simple._fromArgs(text, preset, **bPromptKwargs)
         
-        if text in self.choicesMap:
+        if any(map(lambda bPrompt_existing: bPrompt_existing.name == bPrompt.name, self.choicesList)):
             print(f"WARNING: Duplicate CHOICE in {self.name} -> {text}")
         
-        self.choicesMap[text] = bPrompt
+        self.choicesList.append(bPrompt)
     
     def addChoices(self, **choicesKwargs: str):
-        choicesMap: dict[str, B_Prompt] = {}
+        choicesList: list[B_Prompt] = []
         
         special_type = choicesKwargs["type"]
         match special_type:
             case "COLOR":
-                choicesMap = B_UI_Component_Dropdown._buildColorChoicesMap(choicesKwargs["postfix"])
+                choicesList = B_UI_Component_Dropdown._buildColorChoicesList(choicesKwargs["postfix"])
             case _:
-                print(f"Invalid CHOICES type: {special_type}")
+                print(f"Invalid CHOICES type in {self.name} -> {special_type}")
         
-        self.choicesMap.update(choicesMap)
+        self.choicesList += choicesList
     
     def buildExtended(self) -> B_UI:
-        return B_UI_Component_Dropdown._fromArgs(self.name, self.choicesMap, **self.args)
+        return B_UI_Component_Dropdown._fromArgs(self.name, self.choicesList, **self.args)
 
 class B_UI_Map():
     def __init__(self, path_base: str, file_name_layout: str, file_name_presets: str, tagged_show: bool = True, validate: bool = True):
