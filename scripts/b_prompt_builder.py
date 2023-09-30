@@ -81,6 +81,9 @@ class B_UI(ABC):
     def finalizeUI(self, componentMap: dict):
         """Bindings, etc."""
         pass
+
+    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
+        pass
     
     @abstractmethod
     def buildSelf(self) -> typing.Any:
@@ -161,10 +164,6 @@ class B_UI_Component(B_UI, ABC):
     def getUpdateRandom(self, currentValue) -> typing.Any:
         pass
 
-    @abstractmethod
-    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
-        pass
-
 class B_UI_Container(B_UI):
     @staticmethod
     @abstractmethod
@@ -185,6 +184,14 @@ class B_UI_Container(B_UI):
     
     def getDefaultName(self) -> str:
         return "Container"
+    
+    def setValue(self, *values) -> int:
+        i: int = super().setValue(*values)
+        
+        for bUi in self.items:
+            i += bUi.setValue(*values[i:])
+        
+        return i
     
     def buildUI(self) -> list[typing.Any]:
         built = super().buildUI()
@@ -260,6 +267,18 @@ class B_UI_Container(B_UI):
                 break
         
         return valid
+    
+    def finalizeUI(self, componentMap: dict):
+        super().finalizeUI(componentMap)
+
+        for bUi in self.items:
+            bUi.finalizeUI(componentMap)
+    
+    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
+        super().handlePrompt(p, componentMap)
+
+        for bUi in self.items:
+            bUi.handlePrompt(p, componentMap)
     
     def handleItems(self, items: list[B_UI], buildCustomPromptInputs: bool, prefix: str) -> list[B_UI]:
         if buildCustomPromptInputs:
@@ -511,7 +530,9 @@ class B_UI_Component_Textbox(B_UI_Component):
     def getUpdateRandom(self, currentValue) -> typing.Any:
         return self.getUpdate(currentValue)
 
-    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict[str, B_UI_Component]):
+    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
+        super().handlePrompt(p, componentMap)
+
         if not self.isNegativePrompt:
             p.prompt = addPrompt(p.prompt, self.value)
         else:
@@ -538,7 +559,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
             , multiselect = bool(int(kwargs.get("multi_select", 0)))
             , allowCustomValues = bool(int(kwargs.get("allow_custom", 1)))
             , sortChoices = bool(int(kwargs.get("sort", 1)))
-            , advanced = bool(int(kwargs.get("advanced", 0)))
+            , advanced = not bool(int(kwargs.get("simple", 0)))
             , hideLabel = bool(int(kwargs.get("hide_label", 0)))
             , scale = int(kwargs.get("scale", 1))
             , visible = not bool(int(kwargs.get("hide", 0)))
@@ -573,7 +594,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
         , multiselect: bool = False
         , allowCustomValues: bool = True
         , sortChoices: bool = True
-        , advanced: bool = False
+        , advanced: bool = True
         , hideLabel: bool = False
         , scale: int = None
         , visible: bool = True
@@ -884,7 +905,9 @@ class B_UI_Component_Dropdown(B_UI_Component):
         
         return self.getUpdate(value)
     
-    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict[str, B_UI_Component]):
+    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
+        super().handlePrompt(p, componentMap)
+
         bPrompts = self.getBPromptsFromValue()
         if len(bPrompts) > 0:
             for choice, bPrompt in bPrompts:
@@ -1022,7 +1045,9 @@ class B_UI_Component_Slider(B_UI_Component):
         value = float(random.randint(self.getMinimum(), self.getMaximum()))
         return self.getUpdate(value)
 
-    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict[str, B_UI_Component]):
+    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
+        super().handlePrompt(p, componentMap)
+        
         promptToAdd = buildRangePrompt(self.promptA, self.promptB, self.value)
         
         if not self.isNegativePrompt:
@@ -1248,9 +1273,7 @@ class B_UI_Map():
         self.layout = self.parseLayout(os.path.join(path_base, file_name_layout), tagged_show)
         self.presets = self.parsePresets(os.path.join(path_base, file_name_presets))
         
-        self.uiMap: dict[str, B_UI_Container | B_UI_Component] = {}
-        self.componentMap: dict[str, B_UI_Component] = {}
-        self.buildMaps(self.layout, self.uiMap, self.componentMap)
+        self.componentMap = self.buildComponentMap(self.layout, {})
 
         if validate:
             self.validate()
@@ -1475,20 +1498,22 @@ class B_UI_Map():
         
         return presets
     
-    def buildMaps(self, layout: list[B_UI], target_ui: dict[str, B_UI_Container | B_UI_Component], target_bcomponents: dict[str, B_UI_Component]):
+    def buildComponentMap(self, layout: list[B_UI], target: dict[str, B_UI_Component]) -> dict[str, B_UI_Component]:
         for bUi in layout:
-            if bUi.name in target_ui:
-                print(f"WARNING: Duplicate attribute -> {bUi.name}")
-            
-            target_ui[bUi.name] = bUi
-
             bUi_type = type(bUi)
+
             if issubclass(bUi_type, B_UI_Component):
                 bComponent: B_UI_Component = bUi
-                target_bcomponents[bUi.name] = bComponent
+
+                if bComponent.name in target:
+                    print(f"WARNING: Duplicate component -> {bUi.name}")
+                target[bComponent.name] = bComponent
+
             elif issubclass(bUi_type, B_UI_Container):
                 bContainer: B_UI_Container = bUi
-                self.buildMaps(bContainer.items, target_ui, target_bcomponents)
+                target = self.buildComponentMap(bContainer.items, target)
+        
+        return target
     
     def validate(self):
         valid: bool = True
@@ -1509,10 +1534,10 @@ class B_UI_Map():
 
         B_UI_Markdown._buildSeparator()
         
-        for item in self.layout:
-            grComponents += item.buildUI()
+        for bUi in self.layout:
+            grComponents += bUi.buildUI()
 
-        for bUi in self.uiMap.values():
+        for bUi in self.layout:
             bUi.finalizeUI(self.componentMap)
         
         return grComponents
@@ -1556,19 +1581,13 @@ class Script(scripts.Script):
 
     def run(self, p, *args):
         i = 0
-        for k in list(b_layout.uiMap):
-            ui = b_layout.uiMap[k]
-            componentsSet = ui.setValue(*args[i:])
-            if k in b_layout.componentMap:
-                bUi: B_UI_Component = ui
-                bUi.handlePrompt(p, b_layout.componentMap)
-            i += componentsSet
+        for bUi in b_layout.layout:
+            i += bUi.setValue(*args[i:])
+            bUi.handlePrompt(p, b_layout.componentMap)
         
         # not necessary for now since preset UI doesn't do any prompt handling at this point:
-        for k in list(b_layout.presets):
-            preset = b_layout.presets[k]
-            componentsSet = preset.setValue(*args[i:])
-            i += componentsSet
+        for preset in b_layout.presets.values():
+            i += preset.setValue(*args[i:])
         
         proc = process_images(p)
         

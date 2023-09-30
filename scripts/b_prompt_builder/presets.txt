@@ -1,15 +1,19 @@
 PRESET Some Full Preset
 	SET Positive prompt --v promptA
-	SET SomeDropdownA --v ChoiceB, ChoiceC
-	SET SomeDropdownB --v SomeSpecialChoice
+	SET Some Dropdown --v ChoiceB, ChoiceC
+	SET Some Unsorted Dropdown --v Some Special Choice
 	SET SomethingA - SomethingB --v 50
 END
 
 PRESET Some Additive Preset --is_additive 1
 	SET Positive prompt --v promptA
-	SET SomeDropdownA --v ChoiceB, ChoiceC
-	SET SomeDropdownB --v SomeSpecialChoice
+	SET Some Dropdown --v ChoiceB, ChoiceC
+	SET Some Unsorted Dropdown --v Some Special Choice
 	SET SomethingA - SomethingB --v 50
+END
+
+PRESET Some Hidden Preset --hide 1
+	SET Positive prompt --v promptA
 END
 .
 
