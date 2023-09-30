@@ -389,34 +389,46 @@ class B_UI_Preset(B_UI):
     def finalizeUI(self, componentMap: dict):
         super().finalizeUI(componentMap)
 
-        bComponents: list[B_UI_Component] = componentMap.values()
-        components: list[typing.Any] = list(map(lambda bComponent: bComponent.ui, bComponents))
+        bComponents: list[B_UI_Component] = list(componentMap.values())
         
-        def applyPreset(*components):
-            return list(map(self.getPresetValue, bComponents, components))
+        components_inputs: list[typing.Any] = []
+        components_outputs: list[typing.Any] = []
+        for bComponent in bComponents:
+            components_inputs.append(bComponent.ui)
+            components_outputs += [bComponent.ui] + bComponent.ui_extra_outputs
+        
+        def _applyPreset(*inputs):
+            updates: list[typing.Any] = []
+
+            i = 0
+            for bComponent in bComponents:
+                updates += self.getPresetValue(bComponent, inputs[i])[0]
+                i += 1
+            
+            return updates
         
         self.ui.click(
-            fn = applyPreset
-            , inputs = components
-            , outputs = components
+            fn = _applyPreset
+            , inputs = components_inputs
+            , outputs = components_outputs
         )
     
     def buildSelf(self) -> typing.Any:
         return gr.Button(self.name, visible = self.visible)
     
-    def getPresetValue(self, bComponent: B_UI_Component, componentValue):
-        component = bComponent.ui
+    def getPresetValue(self, bComponent: B_UI_Component, componentValue) -> tuple[list, int]:
+        """Returns update values and number of inputs consumed"""
+        presetValue = componentValue
+
+        if bComponent.name in self.mappings:
+            presetValue = self.mappings[bComponent.name]
+
+            if type(bComponent.ui) is not gr.Dropdown or not bComponent.ui.multiselect:
+                presetValue = bComponent.defaultValue if len(presetValue) == 0 else presetValue[0]
+        elif not self.isAdditive:
+            presetValue = bComponent.defaultValue
         
-        hasPresetValue = component.label in self.mappings
-        if not hasPresetValue:
-            return bComponent.defaultValue if not self.isAdditive else componentValue
-        
-        presetValue: typing.Any = self.mappings[component.label]
-        
-        if type(component) is not gr.Dropdown or not component.multiselect:
-            presetValue = bComponent.defaultValue if len(presetValue) == 0 else presetValue[0]
-        
-        return presetValue
+        return bComponent.getUpdate(presetValue)
 
 class B_Prompt(ABC):
     def __init__(self, name: str):
@@ -774,7 +786,11 @@ class B_UI_Component_Dropdown(B_UI_Component):
         bComponents: list[B_UI_Component] = list(componentMap.values())
         bComponents.remove(self)
         
-        components: list[typing.Any] = list(map(lambda bComponent: bComponent.ui, bComponents))
+        components_inputs: list[typing.Any] = []
+        components_outputs: list[typing.Any] = []
+        for bComponent in bComponents:
+            components_inputs.append(bComponent.ui)
+            components_outputs += [bComponent.ui] + bComponent.ui_extra_outputs
 
         anyChoiceMapHasPreset = any(
             map(
@@ -783,35 +799,37 @@ class B_UI_Component_Dropdown(B_UI_Component):
             )
         )
         if anyChoiceMapHasPreset:
-            def getPresetValues(choices: str | list[str], *args):
-                if type(choices) is str:
+            def _getPresetValues(choices: str | list[str], *inputs) -> list[typing.Any]:
+                if type(choices) is not list:
                     choices = [choices]
                 
-                updatedValues: list[typing.Any] = list(args)
-                
-                if len(choices) > 0:
+                updatesMap: dict[str, list] = {}
+
+                i = 0
+                for bComponent in bComponents:
+                    currentValue = inputs[i]
+                    
                     for choice in choices:
                         bPrompt = self.choicesMap[choice]
-                        
-                        if not issubclass(type(bPrompt), B_Prompt_Simple):
-                            continue
-                        
-                        bPrompt_simple: B_Prompt_Simple = bPrompt
-
-                        if bPrompt_simple.preset == None:
-                            continue
-                        
-                        i = 0
-                        for bComponent in bComponents:
-                            updatedValues[i] = bPrompt_simple.preset.getPresetValue(bComponent, updatedValues[i])
-                            i += 1
+                        if issubclass(type(bPrompt), B_Prompt_Simple):
+                            bPrompt_simple: B_Prompt_Simple = bPrompt
+                            if bPrompt_simple.preset is not None:
+                                updatesMap[bComponent.name] = bPrompt_simple.preset.getPresetValue(bComponent, currentValue)[0]
+                    
+                    if bComponent.name not in updatesMap:
+                        updatesMap[bComponent.name] = bComponent.getUpdate(currentValue)[0]
+                    
+                    i += 1
                 
-                return updatedValues
+                updates: list[typing.Any] = []
+                for bComponentUpdates in updatesMap.values():
+                    updates += bComponentUpdates
+                return updates
             
             self.ui.select(
-                fn = getPresetValues
-                , inputs = [self.ui] + components
-                , outputs = components
+                fn = _getPresetValues
+                , inputs = [self.ui] + components_inputs
+                , outputs = components_outputs
             )
     
     def buildChoicesMap(self, choicesList: list[B_Prompt], insertEmptyChoice: bool, sortChoices: bool) -> dict[str, B_Prompt]:
@@ -909,7 +927,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
             updates.append(self.advanced_container.update(visible = len(choices) > 0 and choices[0] != self.empty_choice))
             for k in self.advanced_options:
                 number, column = self.advanced_options[k]
-                updates.append(values[consumed] if len(values) > 0 else self.advanced_defaultValue)
+                updates.append(values[consumed] if len(values) > consumed else self.advanced_defaultValue)
                 updates.append(column.update(visible = k in choices))
                 consumed += 1
         
@@ -992,10 +1010,7 @@ class B_UI_Component_Slider(B_UI_Component):
         return "Slider"
     
     def buildUI(self) -> list[typing.Any]:
-        super().buildUI()
-
-        built: list[typing.Any] = []
-        built.append(self.ui)
+        built = super().buildUI()
 
         if self.buildButtons:
             with gr.Row():
