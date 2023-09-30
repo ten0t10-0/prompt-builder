@@ -45,6 +45,8 @@ class B_UI(ABC):
         self.isNamed = isNamed
 
         self.ui: typing.Any = None
+        self.ui_extra_inputs: list[typing.Any] = []
+        self.ui_extra_outputs: list[typing.Any] = []
     
     def getNextIdentifier(self) -> int:
         B_UI._identifier += 1
@@ -84,6 +86,14 @@ class B_UI(ABC):
 
     def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
         pass
+
+    def getUpdate(self, *values) -> tuple[list, int]:
+        """Returns update values and number of inputs consumed"""
+        return [], 0
+    
+    def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
+        """Returns update values and number of inputs consumed"""
+        return self.getUpdate(*currentValues)
     
     @abstractmethod
     def buildSelf(self) -> typing.Any:
@@ -146,6 +156,9 @@ class B_UI_Component(B_UI, ABC):
         """Base function -> Validates default value"""
         return super().validate(componentMap) and self.validateValue(self.defaultValue)
     
+    def getUpdate(self, *values) -> tuple[list, int]:
+        return [self.handleUpdateValue(values[0] if len(values) > 0 else None)], 1
+    
     def processValue(self, value: typing.Any) -> typing.Any:
         return value
     
@@ -155,14 +168,6 @@ class B_UI_Component(B_UI, ABC):
     
     def handleUpdateValue(self, value):
         return value if value is not None else self.defaultValue
-    
-    @abstractmethod
-    def getUpdate(self, value = None) -> typing.Any:
-        pass
-
-    @abstractmethod
-    def getUpdateRandom(self, currentValue) -> typing.Any:
-        pass
 
 class B_UI_Container(B_UI):
     @staticmethod
@@ -196,8 +201,9 @@ class B_UI_Container(B_UI):
     def buildUI(self) -> list[typing.Any]:
         built = super().buildUI()
         built_items: list[typing.Any] = []
-
-        built_items_components: list[typing.Any] = []
+        
+        built_items_inputs: list[typing.Any] = []
+        built_items_outputs: list[typing.Any] = []
         
         with self.ui:
             for item in self.items:
@@ -208,18 +214,21 @@ class B_UI_Container(B_UI):
 
                     if issubclass(type(item), B_UI_Component):
                         bComponent: B_UI_Component = item
-                        built_items_components.append(bComponent.ui)
+                        built_items_inputs += [bComponent.ui] + bComponent.ui_extra_inputs
+                        built_items_outputs += [bComponent.ui] + bComponent.ui_extra_outputs
                     elif issubclass(type(item), B_UI_Container):
                         bContainer: B_UI_Container = item
-                        built_items_components += list(map(lambda bComponent: bComponent.ui, bContainer.bComponents))
+                        for bComponent in bContainer.bComponents:
+                            built_items_inputs += [bComponent.ui] + bComponent.ui_extra_inputs
+                            built_items_outputs += [bComponent.ui] + bComponent.ui_extra_outputs
             
             if self.buildResetButton or self.buildRandomButton:
                 def _buildRandomButton() -> typing.Any:
                     btnRandom = gr.Button(value = f"Randomize {self.name}")
                     btnRandom.click(
                         fn = self.randomizeComponentsValues
-                        , inputs = built_items_components
-                        , outputs = built_items_components
+                        , inputs = built_items_inputs
+                        , outputs = built_items_outputs
                     )
                     self.buttonRandom = btnRandom
                     return btnRandom
@@ -228,7 +237,7 @@ class B_UI_Container(B_UI):
                     btnReset = gr.Button(value = f"Reset {self.name}")
                     btnReset.click(
                         fn = self.resetComponentsValues
-                        , outputs = built_items_components
+                        , outputs = built_items_outputs
                     )
                     self.buttonReset = btnReset
                     return btnReset
@@ -280,6 +289,28 @@ class B_UI_Container(B_UI):
         for bUi in self.items:
             bUi.handlePrompt(p, componentMap)
     
+    def getUpdate(self, *values) -> tuple[list, int]:
+        updates: list = []
+        consumed = 0
+
+        for bUi in self.items:
+            bUi_updates, bUi_consumed = bUi.getUpdate(*values[consumed:])
+            updates += bUi_updates
+            consumed += bUi_consumed
+        
+        return updates, consumed
+    
+    def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
+        updates: list = []
+        consumed = 0
+
+        for bUi in self.items:
+            bUi_updates, bUi_consumed = bUi.getUpdateRandom(*currentValues[consumed:])
+            updates += bUi_updates
+            consumed += bUi_consumed
+        
+        return updates, consumed
+    
     def handleItems(self, items: list[B_UI], buildCustomPromptInputs: bool, prefix: str) -> list[B_UI]:
         if buildCustomPromptInputs:
             items.append(B_UI_Component_Textbox(f"{prefix} - Positive prompt"))
@@ -306,10 +337,7 @@ class B_UI_Container(B_UI):
         return bComponents
     
     def resetComponentsValues(self) -> list[typing.Any]:
-        updates = []
-        
-        for x in self.bComponents:
-            updates.append(x.getUpdate())
+        updates, consumed = self.getUpdate()
         
         if len(updates) == 1:
             updates = updates[0]
@@ -317,12 +345,7 @@ class B_UI_Container(B_UI):
         return updates
     
     def randomizeComponentsValues(self, *components) -> list[typing.Any]:
-        updates = []
-        
-        i = 0
-        for x in self.bComponents:
-            updates.append(x.getUpdateRandom(components[i]))
-            i += 1
+        updates, consumed = self.getUpdateRandom(*components)
         
         if len(updates) == 1:
             updates = updates[0]
@@ -521,12 +544,6 @@ class B_UI_Component_Textbox(B_UI_Component):
             , scale = self.scale
             , visible = self.visible
         )
-    
-    def getUpdate(self, value = None) -> typing.Any:
-        return gr.Textbox.update(value = self.handleUpdateValue(value))
-    
-    def getUpdateRandom(self, currentValue) -> typing.Any:
-        return self.getUpdate(currentValue)
 
     def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
         super().handlePrompt(p, componentMap)
@@ -640,6 +657,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
                 variant = "panel"
                 , visible = self.value is not None and len(self.value) > 0 and self.value != self.empty_choice
             )
+            self.ui_extra_outputs.append(self.advanced_container)
             with self.advanced_container:
                 for k in choices:
                     column = gr.Column(
@@ -648,11 +666,6 @@ class B_UI_Component_Dropdown(B_UI_Component):
                         , min_width = 160
                     )
                     with column:
-                        markdown = gr.Markdown(
-                            value = f"{k}"
-                            , visible = False
-                        )
-
                         number = gr.Number(
                             label = f"{k} (S)"
                             , value = self.advanced_defaultValue
@@ -661,6 +674,11 @@ class B_UI_Component_Dropdown(B_UI_Component):
                         )
 
                         built.append(number)
+
+                        self.ui_extra_inputs.append(number)
+                        
+                        self.ui_extra_outputs.append(number)
+                        self.ui_extra_outputs.append(column)
                     
                     self.advanced_options[k] = number, column
                     self.advanced_values[k] = self.advanced_defaultValue
@@ -688,7 +706,7 @@ class B_UI_Component_Dropdown(B_UI_Component):
             
             return output
         
-        self.ui.change(
+        self.ui.input(
             fn = _update
             , inputs = [self.ui, *map(lambda t: t[0], self.advanced_options.values())]
             , outputs = [self.advanced_container] + sum(list(map(lambda t: list(t), self.advanced_options.values())), [])
@@ -851,35 +869,6 @@ class B_UI_Component_Dropdown(B_UI_Component):
         
         return bPrompts
     
-    def getUpdate(self, value = None) -> typing.Any:
-        return gr.Dropdown.update(value = self.handleUpdateValue(value))
-    
-    def getUpdateRandom(self, currentValue) -> typing.Any:
-        value: str | list[str]
-
-        choiceKeys = list(self.choicesMap.keys())
-        
-        if len(choiceKeys) == 0:
-            value = currentValue
-        else:
-            if self.multiselect:
-                value = []
-
-                cMax = len(choiceKeys)
-                if self.random_maxChoices > 0 and self.random_maxChoices < cMax:
-                    cMax = self.random_maxChoices
-                
-                r = random.randint(0, cMax)
-                if r > 0:
-                    for c in range(r):
-                        i = random.randint(0, len(choiceKeys) - 1)
-                        value.append(choiceKeys.pop(i))
-            else:
-                r = random.randint(0, len(choiceKeys) - 1)
-                value = choiceKeys[r]
-        
-        return self.getUpdate(value)
-    
     def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
         super().handlePrompt(p, componentMap)
 
@@ -904,6 +893,70 @@ class B_UI_Component_Dropdown(B_UI_Component):
                 if bPrompt is not None:
                     p.prompt = addPrompt(p.prompt, positive)
                     p.negative_prompt = addPrompt(p.negative_prompt, negative)
+    
+    def getUpdate(self, *values) -> tuple[list, int]:
+        updates, consumed = super().getUpdate(*values)
+        
+        if self.advanced:
+            selfValue: str | list[str] = updates[0]
+            if type(selfValue) is not list:
+                selfValue = [selfValue]
+            
+            choices: list[str] = []
+            for v in selfValue:
+                choices.append(self.choicesMap[v].name)
+            
+            updates.append(self.advanced_container.update(visible = len(choices) > 0 and choices[0] != self.empty_choice))
+            for k in self.advanced_options:
+                number, column = self.advanced_options[k]
+                updates.append(values[consumed] if len(values) > 0 else self.advanced_defaultValue)
+                updates.append(column.update(visible = k in choices))
+                consumed += 1
+        
+        return updates, consumed
+    
+    def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
+        newValues: list = [currentValues[0]]
+        consumed: int = 1
+
+        choiceKeys = list(self.choicesMap.keys())
+        
+        if len(choiceKeys) > 0:
+            if self.multiselect:
+                value: list[str] = []
+
+                cMax = len(choiceKeys)
+                if self.random_maxChoices > 0 and self.random_maxChoices < cMax:
+                    cMax = self.random_maxChoices
+                
+                r = random.randint(0, cMax)
+                if r > 0:
+                    for c in range(r):
+                        i = random.randint(0, len(choiceKeys) - 1)
+                        value.append(choiceKeys.pop(i))
+                
+                newValues[0] = value
+            else:
+                r = random.randint(0, len(choiceKeys) - 1)
+                newValues[0] = choiceKeys[r]
+        
+        if self.advanced:
+            selfValue: str | list[str] = newValues[0]
+            if type(selfValue) is not list:
+                selfValue = [selfValue]
+            
+            choices: list[str] = []
+            for v in selfValue:
+                choices.append(self.choicesMap[v].name)
+            
+            newValues.append(self.advanced_container.update(visible = len(choices) > 0 and choices[0] != self.empty_choice))
+            for k in self.advanced_options:
+                number, column = self.advanced_options[k]
+                newValues.append(self.advanced_defaultValue)
+                newValues.append(column.update(visible = k in choices))
+                consumed += 1
+        
+        return newValues, consumed
 
 class B_UI_Component_Slider(B_UI_Component):
     @staticmethod
@@ -946,8 +999,8 @@ class B_UI_Component_Slider(B_UI_Component):
 
         if self.buildButtons:
             with gr.Row():
-                self.buttonA = self.buildButton(self.ui, self.promptAButton, 0)
-                self.buttonB = self.buildButton(self.ui, self.promptBButton, self.getMaximum())
+                self.buttonA = self.buildButton(self.promptAButton, 0)
+                self.buttonB = self.buildButton(self.promptBButton, self.getMaximum())
 
                 built.append(self.buttonA)
                 built.append(self.buttonB)
@@ -968,6 +1021,9 @@ class B_UI_Component_Slider(B_UI_Component):
             count += 1
         
         return count
+    
+    def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
+        return [float(random.randint(self.getMinimum(), self.getMaximum()))], 1
 
     def buildSelf(self) -> typing.Any:
         return gr.Slider(
@@ -1004,21 +1060,14 @@ class B_UI_Component_Slider(B_UI_Component):
     def getStep(self) -> float:
         return 1
     
-    def buildButton(self, component: typing.Any, text: str, value: float) -> typing.Any:
+    def buildButton(self, text: str, value: float) -> typing.Any:
         btn = gr.Button(value = text)
         btn.click(
-            fn = lambda component: self.getUpdate(value)
-            , inputs = component
-            , outputs = component
+            fn = lambda btnText: self.getUpdate(value)[0][0]
+            , inputs = btn
+            , outputs = self.ui
         )
         return btn
-    
-    def getUpdate(self, value = None) -> typing.Any:
-        return gr.Slider.update(value = self.handleUpdateValue(value))
-    
-    def getUpdateRandom(self, currentValue) -> typing.Any:
-        value = float(random.randint(self.getMinimum(), self.getMaximum()))
-        return self.getUpdate(value)
 
     def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
         super().handlePrompt(p, componentMap)
