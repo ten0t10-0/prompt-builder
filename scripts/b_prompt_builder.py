@@ -389,7 +389,15 @@ class B_UI_Preset(B_UI):
     def finalizeUI(self, componentMap: dict):
         super().finalizeUI(componentMap)
 
-        bComponents: list[B_UI_Component] = list(componentMap.values())
+        bComponentMap: dict[str, B_UI_Component] = componentMap
+
+        bComponents: list[B_UI_Component] = []
+        if self.isAdditive:
+            for bComponent in bComponentMap.values():
+                if bComponent.name in self.mappings:
+                    bComponents.append(bComponent)
+        else:
+            bComponents += list(bComponentMap.values())
         
         components_inputs: list[typing.Any] = []
         components_outputs: list[typing.Any] = []
@@ -782,23 +790,24 @@ class B_UI_Component_Dropdown(B_UI_Component):
     
     def finalizeUI(self, componentMap: dict):
         super().finalizeUI(componentMap)
-        
-        bComponents: list[B_UI_Component] = list(componentMap.values())
-        bComponents.remove(self)
-        
-        components_inputs: list[typing.Any] = []
-        components_outputs: list[typing.Any] = []
-        for bComponent in bComponents:
-            components_inputs.append(bComponent.ui)
-            components_outputs += [bComponent.ui] + bComponent.ui_extra_outputs
 
-        anyChoiceMapHasPreset = any(
-            map(
-                lambda bPrompt: False if type(bPrompt) is not B_Prompt_Simple else bPrompt.preset is not None and len(bPrompt.preset.mappings) > 0
-                , self.choicesMap.values()
-            )
-        )
-        if anyChoiceMapHasPreset:
+        bComponentMap: dict[str, B_UI_Component] = componentMap
+        
+        bComponents: list[B_UI_Component] = []
+        for bPrompt in self.choicesMap.values():
+            if type(bPrompt) is B_Prompt_Simple and bPrompt.preset is not None:
+                for k in bPrompt.preset.mappings:
+                    bComponent = bComponentMap[k]
+                    if bComponent not in bComponents:
+                        bComponents.append(bComponent)
+        
+        if len(bComponents) > 0:
+            components_inputs: list[typing.Any] = []
+            components_outputs: list[typing.Any] = []
+            for bComponent in bComponents:
+                components_inputs.append(bComponent.ui)
+                components_outputs += [bComponent.ui] + bComponent.ui_extra_outputs
+            
             def _getPresetValues(choices: str | list[str], *inputs) -> list[typing.Any]:
                 if type(choices) is not list:
                     choices = [choices]
@@ -811,10 +820,8 @@ class B_UI_Component_Dropdown(B_UI_Component):
                     
                     for choice in choices:
                         bPrompt = self.choicesMap[choice]
-                        if issubclass(type(bPrompt), B_Prompt_Simple):
-                            bPrompt_simple: B_Prompt_Simple = bPrompt
-                            if bPrompt_simple.preset is not None:
-                                updatesMap[bComponent.name] = bPrompt_simple.preset.getPresetValue(bComponent, currentValue)[0]
+                        if type(bPrompt) is B_Prompt_Simple and bPrompt.preset is not None:
+                            updatesMap[bComponent.name] = bPrompt.preset.getPresetValue(bComponent, currentValue)[0]
                     
                     if bComponent.name not in updatesMap:
                         updatesMap[bComponent.name] = bComponent.getUpdate(currentValue)[0]
