@@ -622,6 +622,10 @@ class B_UI_Component_Dropdown(B_UI_Component):
                 , "Orange"
                 , "Yellow"
                 , "Multicolored"
+                , "Pale"
+                , "Silver"
+                , "Gold"
+                , "Tan"
             ]
         ))
     
