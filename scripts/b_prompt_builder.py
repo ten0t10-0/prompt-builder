@@ -1578,19 +1578,7 @@ class B_UI_Map():
     def buildUI(self) -> list[typing.Any]:
         grComponents: list[typing.Any] = []
 
-        B_UI_Markdown._buildSeparator()
-        
-        for bUi in self.layout:
-            grComponents += bUi.buildUI()
-
-        for bUi in self.layout:
-            bUi.finalizeUI(self.componentMap)
-        
-        return grComponents
-    
-    def buildPresetsUI(self) -> list[typing.Any]:
-        grComponents: list[typing.Any] = []
-
+        # PRESETS
         B_UI_Markdown._buildSeparator()
 
         with gr.Accordion("Presets", open = False):
@@ -1601,11 +1589,21 @@ class B_UI_Map():
                 i += 1
                 if i < len(self.presets) and preset.visible:
                     B_UI_Markdown._buildSeparator()
+
+        # LAYOUT
+        B_UI_Markdown._buildSeparator()
+        
+        for bUi in self.layout:
+            grComponents += bUi.buildUI()
+        
+        return grComponents
+    
+    def finalizeUI(self):
+        for bUi in self.layout:
+            bUi.finalizeUI(self.componentMap)
         
         for preset in self.presets.values():
             preset.finalizeUI(self.componentMap)
-        
-        return grComponents
 
 b_layout = B_UI_Map(
     path_base = os.path.join(scripts.basedir(), "scripts", "b_prompt_builder")
@@ -1623,17 +1621,19 @@ class Script(scripts.Script):
         return True
 
     def ui(self, is_img2img):
-        return b_layout.buildUI() + b_layout.buildPresetsUI()
+        built = b_layout.buildUI()
+        b_layout.finalizeUI()
+        return built
 
     def run(self, p, *args):
         i = 0
+        
+        for preset in b_layout.presets.values():
+            i += preset.setValue(*args[i:])
+        
         for bUi in b_layout.layout:
             i += bUi.setValue(*args[i:])
             bUi.handlePrompt(p, b_layout.componentMap)
-        
-        # not necessary for now since preset UI doesn't do any prompt handling at this point:
-        for preset in b_layout.presets.values():
-            i += preset.setValue(*args[i:])
         
         proc = process_images(p)
         
