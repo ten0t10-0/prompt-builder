@@ -1601,13 +1601,14 @@ class B_UI_Map():
         for bUi in self.layout:
             grComponents += bUi.buildUI()
         
-        # GENERAL
+        # SETTINGS
         B_UI_Markdown._buildSeparator()
 
-        btnClearConfig = gr.Button("Clear config")
-        btnClearConfig.click(fn = self.clearConfigFile)
-
-        grComponents.append(btnClearConfig)
+        with gr.Accordion("Settings", open = False):
+            btnClearConfig = gr.Button("Clear config")
+            btnClearConfig.click(fn = self.clearConfigFile)
+            
+            grComponents.append(btnClearConfig)
         
         return grComponents
     
