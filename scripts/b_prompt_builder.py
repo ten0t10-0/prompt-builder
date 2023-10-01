@@ -3,6 +3,7 @@ import gradio as gr
 import os
 import typing
 import random
+import json
 
 from abc import ABC, abstractmethod
 from modules import scripts
@@ -1596,6 +1597,14 @@ class B_UI_Map():
         for bUi in self.layout:
             grComponents += bUi.buildUI()
         
+        # GENERAL
+        B_UI_Markdown._buildSeparator()
+
+        btnClearConfig = gr.Button("Clear config")
+        btnClearConfig.click(fn = self.clearConfigFile)
+
+        grComponents.append(btnClearConfig)
+        
         return grComponents
     
     def finalizeUI(self):
@@ -1604,6 +1613,21 @@ class B_UI_Map():
         
         for preset in self.presets.values():
             preset.finalizeUI(self.componentMap)
+    
+    def clearConfigFile(self):
+        path = os.path.join(scripts.basedir(), "ui-config.json")
+        with open(path, "r+", encoding = "utf-8") as file_config:
+            config: dict[str, typing.Any] = json.load(file_config)
+            
+            config_keys = filter(lambda k: k.find("b_prompt_builder") == -1, config.keys())
+
+            config_new: dict[str, typing.Any] = {}
+            for k in config_keys:
+                config_new[k] = config[k]
+            
+            file_config.seek(0)
+            json.dump(config_new, file_config, indent = 4)
+            file_config.truncate()
 
 b_layout = B_UI_Map(
     path_base = os.path.join(scripts.basedir(), "scripts", "b_prompt_builder")
