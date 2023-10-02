@@ -9,32 +9,207 @@ from abc import ABC, abstractmethod
 from modules import scripts
 from modules.processing import StableDiffusionProcessing, process_images
 
-def addPrompt(promptExisting: str, promptToAdd: str) -> str:
-    if len(promptToAdd) > 0:
-        if len(promptExisting) > 0:
-            promptExisting += ", " + promptToAdd
-        else:
-            promptExisting = promptToAdd
-    
-    return promptExisting
-
-def buildRangePrompt(promptA: str, promptB: str, value: float) -> str:
-    if len(promptA) == 0 or len(promptB) == 0:
-        return ""
-    
-    if value < 0 or value > 1:
-        return ""
-    
-    if value == 0:
-        return promptA
-    
-    if value == 1:
-        return promptB
-        
-    return f"[{promptB}:{promptA}:{value}]"
-
 def printWarning(component: str, name: str, message: str):
     print(f"VALIDATE/{component}/{name} -> {message}")
+
+class B_UI_(ABC):
+    _identifier: int = 0
+
+    @staticmethod
+    def getNextIdentifier() -> int:
+        B_UI._identifier += 1
+        return B_UI._identifier
+    
+    def __init__(self, name: str = "UI", visible: bool = True):
+        self.identifier = self.getNextIdentifier()
+
+        self.name = name
+        self.visible = visible
+
+        self.ui_inputs: list[typing.Any] = []
+        self.ui_outputs: list[typing.Any] = []
+    
+    def buildUI(self) -> list[typing.Any]:
+        """Returns a list of output Gradio components built"""
+        inputs, outputs = self.buildSelf()
+
+        self.ui_inputs += inputs
+        self.ui_outputs += outputs
+        
+        return self.ui_outputs
+    
+    def finalizeUI(self, componentMap: dict) -> None:
+        """Bindings, etc."""
+        pass
+    
+    def setValue(self, offset: int = 0, *values) -> int:
+        """Returns number of Gradio components consumed in this instance"""
+        return offset
+
+    def getUpdate(self, *values) -> tuple[list, int]:
+        """Returns update values and number of inputs consumed"""
+        return [], 0
+    
+    def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
+        """Returns update values and number of inputs consumed"""
+        return self.getUpdate(*currentValues)
+    
+    @abstractmethod
+    def buildSelf(self) -> tuple[list[typing.Any], list[typing.Any]]:
+        """Builds and returns input and output Gradio components"""
+        pass
+
+    @abstractmethod
+    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict) -> None:
+        pass
+
+class B_Prompt_(B_UI_, ABC):
+    @staticmethod
+    def addPrompt(promptExisting: str, promptToAdd: str) -> str:
+        if len(promptToAdd) > 0:
+            if len(promptExisting) > 0:
+                promptExisting += ", " + promptToAdd
+            else:
+                promptExisting = promptToAdd
+        
+        return promptExisting
+
+    @staticmethod
+    def sanitizePrompt(prompt: str):
+        return prompt.strip() if prompt is not None else ""
+
+    def __init__(self, isPositive: bool = True, isNegative: bool = True, name: str = "Prompt", visible: bool = True):
+        super().__init__(name, visible)
+
+        self.isPositive = isPositive
+        self.isNegative = isNegative
+    
+    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
+        prompt = self.buildPrompt()
+        if self.isPositive:
+            p.prompt = self.addPrompt(p.prompt, prompt)
+        else:
+            p.negative_prompt = self.addPrompt(p.negative_prompt, prompt)
+    
+    def finalizeUI(self, componentMap: dict):
+        super().finalizeUI(componentMap)
+    
+    def setValue(self, offset: int = 0, *values) -> int:
+        self.isPositive = bool(values[offset])
+        offset += 1
+
+        self.isNegative = bool(values[offset])
+        offset += 1
+
+        return super().setValue(offset, *values)
+    
+    def getUpdate(self, *values) -> tuple[list, int]:
+        return super().getUpdate(*values)
+    
+    def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
+        return super().getUpdateRandom(*currentValues)
+    
+    @abstractmethod
+    def buildSelf(self) -> tuple[list[typing.Any], list[typing.Any]]:
+        pass
+
+    @abstractmethod
+    def buildPrompt(self) -> str:
+        pass
+
+class B_Prompt_Simple_(B_Prompt_):
+    def __init__(self, prompt: str, strength_default: float = 1, isPositive: bool = True, isNegative: bool = True, name: str = "Simple Prompt", visible: bool = True):
+        super().__init__(isPositive, isNegative, name, visible)
+
+        self.prompt = self.sanitizePrompt(prompt)
+        self.strength = strength_default
+        self.strength_default = strength_default
+    
+    def finalizeUI(self, componentMap: dict):
+        return super().finalizeUI(componentMap)
+    
+    def setValue(self, offset: int = 0, *values) -> int:
+        self.prompt = self.sanitizePrompt(values[0])
+        offset += 1
+
+        self.strength = float(values[1])
+        offset += 1
+
+        return super().setValue(offset, *values)
+    
+    def getUpdate(self, *values) -> tuple[list, int]:
+        return super().getUpdate(*values)
+    
+    def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
+        return super().getUpdateRandom(*currentValues)
+    
+    def buildSelf(self) -> tuple[list[typing.Any], list[typing.Any]]:
+        inputs: list[typing.Any] = []
+        outputs: list[typing.Any] = []
+
+        column = gr.Column()
+        outputs.append(column)
+        with column:
+            text = gr.Textbox()
+            checkPositive = gr.Checkbox()
+            checkNegative = gr.Checkbox()
+            
+            inputs.append(text)
+            inputs.append(checkPositive)
+            inputs.append(checkNegative)
+
+            outputs.append(text)
+            outputs.append(checkPositive)
+            outputs.append(checkNegative)
+
+        return inputs, outputs
+    
+    def buildPrompt(self) -> str:
+        return self.prompt
+
+class B_Prompt_Range_(B_Prompt_):
+    def __init__(self, promptA: str, promptB: str, value_default: float = 0.5, isPositive: bool = True, isNegative: bool = True, name: str = "Range Prompt", visible: bool = True):
+        super().__init__(isNegative, isPositive, name, visible)
+
+        self.promptA = self.sanitizePrompt(promptA)
+        self.promptB = self.sanitizePrompt(promptB)
+        self.value = value_default
+        self.value_default = value_default
+    
+    def finalizeUI(self, componentMap: dict):
+        return super().finalizeUI(componentMap)
+    
+    def setValue(self, offset: int = 0, *values) -> int:
+        self.value = float(values[0])
+        offset += 1
+
+        return super().setValue(offset, *values)
+    
+    def getUpdate(self, *values) -> tuple[list, int]:
+        return super().getUpdate(*values)
+    
+    def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
+        return super().getUpdateRandom(*currentValues)
+    
+    def buildSelf(self) -> tuple[list[typing.Any], list[typing.Any]]:
+        return super().buildSelf()
+    
+    def buildPrompt(self) -> str:
+        if (
+            len(self.promptA) == 0
+            or len(self.promptB) == 0
+            or self.value < 0
+            or self.value > 1
+        ):
+            return ""
+        
+        if self.value == 0:
+            return self.promptA
+        
+        if self.value == 1:
+            return self.promptB
+            
+        return f"[{self.promptB}:{self.promptA}:{self.value}]"
 
 class B_UI(ABC):
     _identifier: int = 0
@@ -123,7 +298,7 @@ class B_UI_Markdown(B_UI):
         if isSeparator:
             value = self.html_separator
         
-        self.value: str = value
+        self.value = value
     
     def getDefaultName(self) -> str:
         return "Markdown"
@@ -140,11 +315,10 @@ class B_UI_Component(B_UI, ABC):
     def _fromArgs(name: str, *args, **kwargs: str) -> B_UI:
         pass
     
-    def __init__(self, name: str = None, defaultValue = None, visible: bool = True):
+    def __init__(self, name: str = None, defaultValue: typing.Any = None, visible: bool = True):
         super().__init__(name, visible, True)
 
-        self.value = defaultValue
-        self.defaultValue = defaultValue
+        self.value = self.defaultValue = self.processValue(defaultValue)
     
     def getDefaultName(self) -> str:
         return "Component"
