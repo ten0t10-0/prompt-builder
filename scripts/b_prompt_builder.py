@@ -16,52 +16,89 @@ class B_UI_(ABC):
     _identifier: int = 0
 
     @staticmethod
-    def getNextIdentifier() -> int:
+    def _getNextIdentifier() -> int:
         B_UI._identifier += 1
         return B_UI._identifier
     
-    def __init__(self, name: str = "UI", visible: bool = True):
-        self.identifier = self.getNextIdentifier()
+    @staticmethod
+    def _getValueFromArgs(args: tuple, index: int, reset: bool, currentValue, defaultValue) -> typing.Any:
+        if reset:
+            return defaultValue
+        
+        value = args[index] if len(args) > index else None
+        if value is None:
+            return currentValue
+        
+        return value
+    
+    def __init__(self, name: str = "UI"):
+        self.identifier = self._getNextIdentifier()
 
         self.name = name
-        self.visible = visible
+        self.visible = True
 
         self.ui_inputs: list[typing.Any] = []
         self.ui_outputs: list[typing.Any] = []
+        self.ui_extra: list[typing.Any] = []
     
     def buildUI(self) -> list[typing.Any]:
         """Returns a list of output Gradio components built"""
-        inputs, outputs = self.buildSelf()
-
-        self.ui_inputs += inputs
-        self.ui_outputs += outputs
+        self.buildSelf(self.ui_inputs, self.ui_outputs, self.ui_extra)
         
         return self.ui_outputs
     
     def finalizeUI(self, componentMap: dict) -> None:
         """Bindings, etc."""
         pass
-    
-    def setValue(self, offset: int = 0, *values) -> int:
-        """Returns number of Gradio components consumed in this instance"""
-        return offset
 
-    def getUpdate(self, *values) -> tuple[list, int]:
-        """Returns update values and number of inputs consumed"""
+    def validate(self, componentMap: dict) -> bool:
+        """Base function -> True"""
+        return True
+    
+    def setValue(self, *values) -> int:
+        """Returns number of values consumed"""
+        return 0
+
+    def getUpdate(self, reset: bool = False, *values) -> tuple[list, int]:
+        """Returns update values and number of values consumed"""
         return [], 0
     
     def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
-        """Returns update values and number of inputs consumed"""
-        return self.getUpdate(*currentValues)
+        """Returns update values and number of values consumed"""
+        return [], 0
     
     @abstractmethod
-    def buildSelf(self) -> tuple[list[typing.Any], list[typing.Any]]:
-        """Builds and returns input and output Gradio components"""
+    def buildSelf(self, inputs: list[typing.Any], outputs: list[typing.Any], extra: list[typing.Any]) -> None:
+        """Builds and returns input, output and extra Gradio components"""
         pass
 
     @abstractmethod
     def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict) -> None:
         pass
+
+class B_UI_Markdown_(B_UI_):
+    _html_separator: str = "<hr style=\"margin: 0.5em 0; border-style: dotted; border-color: var(--border-color-primary);\" />"
+
+    @staticmethod
+    def _buildSeparator():
+        bMarkdown = B_UI_Markdown_(isSeparator = True)
+        bMarkdown.buildUI()
+        return bMarkdown.ui_extra[0]
+    
+    def __init__(self, value: str = None, isSeparator: bool = False, name: str = "Markdown"):
+        super().__init__(name)
+
+        if isSeparator:
+            value = self._html_separator
+        
+        self.value = value
+    
+    def buildSelf(self, inputs: list[typing.Any], outputs: list[typing.Any], extra: list[typing.Any]) -> None:
+        markdown = gr.Markdown(
+            value = self.value
+            , visible = self.visible
+        )
+        extra.append(markdown)
 
 class B_Prompt_(B_UI_, ABC):
     @staticmethod
@@ -78,121 +115,282 @@ class B_Prompt_(B_UI_, ABC):
     def sanitizePrompt(prompt: str):
         return prompt.strip() if prompt is not None else ""
 
-    def __init__(self, isPositive: bool = True, isNegative: bool = True, name: str = "Prompt", visible: bool = True):
-        super().__init__(name, visible)
+    def __init__(self, isNegative: bool = False, name: str = "Prompt"):
+        super().__init__(name)
 
-        self.isPositive = isPositive
         self.isNegative = isNegative
+
+        self.build_checkbox = True
     
-    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
-        prompt = self.buildPrompt()
-        if self.isPositive:
-            p.prompt = self.addPrompt(p.prompt, prompt)
-        else:
-            p.negative_prompt = self.addPrompt(p.negative_prompt, prompt)
-    
-    def finalizeUI(self, componentMap: dict):
-        super().finalizeUI(componentMap)
-    
-    def setValue(self, offset: int = 0, *values) -> int:
-        self.isPositive = bool(values[offset])
-        offset += 1
+    def setValue(self, *values) -> int:
+        offset = super().setValue(*values)
 
         self.isNegative = bool(values[offset])
         offset += 1
 
-        return super().setValue(offset, *values)
+        return offset
     
-    def getUpdate(self, *values) -> tuple[list, int]:
-        return super().getUpdate(*values)
+    def getUpdate(self, reset: bool = False, *values) -> tuple[list, int]:
+        updates, offset = super().getUpdate(reset, *values)
+
+        if self.build_checkbox:
+            isNegative = bool(self._getValueFromArgs(values, offset, reset, self.isNegative, self.isNegative)) #!!!
+            updates.append(isNegative)
+            offset += 1
+        
+        return updates, offset
     
     def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
-        return super().getUpdateRandom(*currentValues)
+        updates, offset = super().getUpdateRandom(*currentValues)
+
+        if self.build_checkbox:
+            isNegative = bool(random.randint(0, 1))
+            updates.append(isNegative)
+            offset += 1
+        
+        return updates, offset
     
-    @abstractmethod
-    def buildSelf(self) -> tuple[list[typing.Any], list[typing.Any]]:
-        pass
+    def buildSelf(self, inputs: list[typing.Any], outputs: list[typing.Any], extra: list[typing.Any]) -> None:
+        if self.build_checkbox:
+            checkNegative = gr.Checkbox(
+                label = f"{self.name} (N)"
+                , value = self.isNegative
+                , visible = self.visible
+            )
+            
+            inputs.append(checkNegative)
+            outputs.append(checkNegative)
+    
+    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict):
+        prompt = self.buildPrompt()
+        if not self.isNegative:
+            p.prompt = self.addPrompt(p.prompt, prompt)
+        else:
+            p.negative_prompt = self.addPrompt(p.negative_prompt, prompt)
 
     @abstractmethod
     def buildPrompt(self) -> str:
         pass
 
 class B_Prompt_Simple_(B_Prompt_):
-    def __init__(self, prompt: str, strength_default: float = 1, isPositive: bool = True, isNegative: bool = True, name: str = "Simple Prompt", visible: bool = True):
-        super().__init__(isPositive, isNegative, name, visible)
+    _strength_min: float = 0
+    _strength_step: float = 0.1
 
-        self.prompt = self.sanitizePrompt(prompt)
+    def __init__(self, prompt: str, strength_default: float = 1, prefix: str = "", postfix: str = "", isNegative: bool = False, name: str = "Simple Prompt"):
+        super().__init__(isNegative, name)
+
+        self.prompt = self.initPrompt(prompt, prefix, postfix)
         self.strength = strength_default
         self.strength_default = strength_default
+
+        self.build_textbox = True
+        self.build_number = True
     
     def finalizeUI(self, componentMap: dict):
-        return super().finalizeUI(componentMap)
+        super().finalizeUI(componentMap)
     
-    def setValue(self, offset: int = 0, *values) -> int:
-        self.prompt = self.sanitizePrompt(values[0])
+    def validate(self, componentMap: dict) -> bool:
+        valid = True
+
+        if self.strength_default < self._strength_min:
+            valid = False
+            printWarning("Simple Prompt", self.name, f"Default strength value exceeds minimum ({self._strength_min})")
+        
+        return valid
+    
+    def setValue(self, *values) -> int:
+        offset = super().setValue(*values)
+
+        self.prompt = self.sanitizePrompt(str(values[offset]))
         offset += 1
 
-        self.strength = float(values[1])
+        self.strength = float(values[offset])
         offset += 1
 
-        return super().setValue(offset, *values)
+        return offset
     
-    def getUpdate(self, *values) -> tuple[list, int]:
-        return super().getUpdate(*values)
+    def getUpdate(self, reset: bool = False, *values) -> tuple[list, int]:
+        updates, offset = super().getUpdate(reset, *values)
+
+        visible = bool(self._getValueFromArgs(values, offset, reset, self.visible, self.visible)) #!!!
+        updates.append(self.ui_outputs[offset].update(visible = visible))
+        offset += 1
+
+        if self.build_textbox:
+            prompt = str(self._getValueFromArgs(values, offset, reset, self.prompt, self.prompt)) #!!!
+            updates.append(prompt)
+            offset += 1
+        
+        if self.build_number:
+            strength = float(self._getValueFromArgs(values, offset, reset, self.strength, self.strength_default))
+            updates.append(strength)
+            offset += 1
+
+        return updates, offset
     
     def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
-        return super().getUpdateRandom(*currentValues)
+        updates, offset = super().getUpdateRandom(*currentValues)
+        
+        visible = currentValues[offset]
+        updates.append(self.ui_outputs[offset].update(visible = visible))
+        offset += 1
+
+        if self.build_textbox:
+            prompt = currentValues[offset]
+            updates.append(prompt)
+            offset += 1
+        
+        if self.build_number:
+            strength = float(random.randint(0, 20) / 10)
+            updates.append(strength)
+            offset += 1
+
+        return updates, offset
     
-    def buildSelf(self) -> tuple[list[typing.Any], list[typing.Any]]:
-        inputs: list[typing.Any] = []
-        outputs: list[typing.Any] = []
-
-        column = gr.Column()
-        outputs.append(column)
+    def buildSelf(self, inputs: list[typing.Any], outputs: list[typing.Any], extra: list[typing.Any]) -> None:
+        column = gr.Column(
+            variant = "panel"
+            , visible = self.visible
+        )
         with column:
-            text = gr.Textbox()
-            checkPositive = gr.Checkbox()
-            checkNegative = gr.Checkbox()
-            
-            inputs.append(text)
-            inputs.append(checkPositive)
-            inputs.append(checkNegative)
+            with gr.Row():
+                if self.build_textbox:
+                    text = gr.Textbox(
+                        label = self.name
+                        , value = self.prompt
+                    )
+                
+                if self.build_number:
+                    number = gr.Number(
+                        label = f"{self.name} (S)"
+                        , value = self.strength_default
+                        , step = self._strength_step
+                        , minimum = self._strength_min
+                    )
+                
+                super().buildSelf(inputs, outputs, extra)
 
-            outputs.append(text)
-            outputs.append(checkPositive)
-            outputs.append(checkNegative)
+                inputs.append(text)
+                inputs.append(number)
 
-        return inputs, outputs
+                outputs.append(column)
+                outputs.append(text)
+                outputs.append(number)
     
     def buildPrompt(self) -> str:
-        return self.prompt
+        prompt = self.prompt
+                    
+        if self.strength > 0 and self.strength != 1:
+            if len(prompt) > 0:
+                prompt = f"({prompt}:{self.strength})"
+        
+        return prompt
+    
+    def initPrompt(self, prompt: str, prefix: str, postfix: str) -> str:
+        prompt = self.sanitizePrompt(prompt)
+        prefix = self.sanitizePrompt(prefix)
+        postfix = self.sanitizePrompt(postfix)
+
+        if len(prompt) > 0:
+            if len(prefix) > 0:
+                prefix = f"{prefix} "
+            if len(postfix) > 0:
+                postfix = f" {postfix}"
+            
+            prompt = f"{prefix}{prompt}{postfix}"
+
+        return prompt
 
 class B_Prompt_Range_(B_Prompt_):
-    def __init__(self, promptA: str, promptB: str, value_default: float = 0.5, isPositive: bool = True, isNegative: bool = True, name: str = "Range Prompt", visible: bool = True):
-        super().__init__(isNegative, isPositive, name, visible)
+    _value_min: int = -1
+    _value_max: int = 100
+    _value_step: int = 1
+
+    def __init__(self, promptA: str, promptB: str, isRequired: bool = False, buildButtons: bool = True, buttonTextA: str = None, buttonTextB: str = None, value_default: float = None, isNegative: bool = False, name: str = "Range Prompt"):
+        super().__init__(isNegative, name)
 
         self.promptA = self.sanitizePrompt(promptA)
         self.promptB = self.sanitizePrompt(promptB)
+        self.isRequired = isRequired
+        self.buildButtons = buildButtons
+        self.buttonTextA = buttonTextA
+        self.buttonTextB = buttonTextB
+
+        if value_default is None:
+            value_default = self.getValueMin()
         self.value = value_default
         self.value_default = value_default
     
-    def finalizeUI(self, componentMap: dict):
-        return super().finalizeUI(componentMap)
+    def validate(self, componentMap: dict) -> bool:
+        valid = True
+
+        if self.value_default < self.getValueMin():
+            valid = False
+            printWarning("Range Prompt", self.name, f"Default value exceeds minimum ({self.getValueMin()})")
+        
+        if self.value_default > self._value_max:
+            valid = False
+            printWarning("Range Prompt", self.name, f"Default value exceeds maximum ({self._value_max})")
+        
+        return valid
     
-    def setValue(self, offset: int = 0, *values) -> int:
-        self.value = float(values[0])
+    def setValue(self, *values) -> int:
+        offset = super().setValue(*values)
+
+        value = float(values[offset])
+        self.value = round(value / self._value_max, 2) if value > -1 else value
         offset += 1
 
-        return super().setValue(offset, *values)
+        return offset
     
-    def getUpdate(self, *values) -> tuple[list, int]:
-        return super().getUpdate(*values)
+    def getUpdate(self, reset: bool = False, *values) -> tuple[list, int]:
+        updates, offset = super().getUpdate(reset, *values)
+
+        value = float(self._getValueFromArgs(values, offset, reset, self.value, self.value_default))
+        updates.append(value)
+        offset += 1
+
+        return updates, offset
     
     def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
-        return super().getUpdateRandom(*currentValues)
+        updates, offset = super().getUpdateRandom(*currentValues)
+
+        value = float(random.randint(self.getValueMin(), self._value_max))
+        updates.append(value)
+        offset += 1
+        
+        return updates, offset
     
-    def buildSelf(self) -> tuple[list[typing.Any], list[typing.Any]]:
-        return super().buildSelf()
+    def buildSelf(self, inputs: list[typing.Any], outputs: list[typing.Any], extra: list[typing.Any]) -> None:
+        slider = gr.Slider(
+            label = self.name
+            , value = self.value
+            , minimum = self.getValueMin()
+            , maximum = self._value_max
+            , step = self._value_step
+            , visible = self.visible
+        )
+
+        super().buildSelf(inputs, outputs, extra)
+        
+        inputs.append(slider)
+        outputs.append(slider)
+
+        if self.buildButtons:
+            def _buildButton(text: str, value: float) -> typing.Any:
+                button = gr.Button(value = text)
+                button.click(
+                    fn = lambda: self.getUpdate(False, None, value)[0][0]
+                    , outputs = slider
+                )
+                return button
+            
+            with gr.Row():
+                buttonA = _buildButton(self.buttonTextA, 0)
+                outputs.append(buttonA)
+
+                buttonB = _buildButton(self.buttonTextB, self._value_max)
+                outputs.append(buttonB)
     
     def buildPrompt(self) -> str:
         if (
@@ -210,6 +408,399 @@ class B_Prompt_Range_(B_Prompt_):
             return self.promptB
             
         return f"[{self.promptB}:{self.promptA}:{self.value}]"
+    
+    def getValueMin(self) -> int:
+        return self._value_min if not self.isRequired else 0
+
+class B_Prompt_Select(B_UI_):
+    _empty_choice_text = "-"
+    _random_maxChoices = 5
+
+    @staticmethod
+    def _buildColorChoicesList(postfixPrompt: str = "") -> list[B_Prompt_Simple_]:
+        return list(map(
+            lambda text: B_Prompt_Simple_(text.lower(), postfix = postfixPrompt, name = text)
+            , [
+                "Dark"
+                , "Light"
+                , "Black"
+                , "Grey"
+                , "White"
+                , "Brown"
+                , "Blue"
+                , "Green"
+                , "Red"
+                , "Blonde"
+                , "Rainbow"
+                , "Pink"
+                , "Purple"
+                , "Orange"
+                , "Yellow"
+                , "Multicolored"
+                , "Pale"
+                , "Silver"
+                , "Gold"
+                , "Tan"
+            ]
+        ))
+    
+    def __init__(
+            self
+            , choicesList: list[B_Prompt_Simple_]
+            , choice_default: str | list[str] = None
+            , multiselect: bool = False
+            , sortChoices: bool = True
+            , scale: int = None
+            , name: str = "Select"
+        ):
+        super().__init__(name)
+        
+        self.choicesList = choicesList
+        self.choice = choice_default
+        self.choice_default = choice_default
+        self.multiselect = multiselect
+        self.sortChoices = sortChoices
+        self.scale = scale
+        
+        self.choicesMap: dict[str, B_Prompt_Simple_] = {}
+    
+    def finalizeUI(self, componentMap: dict) -> None:
+        #presets binding
+        super().finalizeUI(componentMap)
+    
+    def validate(self, componentMap: dict) -> bool:
+        valid = True
+
+        choice_default: list[str] = None
+        if type(self.choice_default) is not list:
+            choice_default = [self.choice_default]
+        else:
+            choice_default = self.choice_default
+        
+        for choice in choice_default:
+            if choice not in self.choicesMap:
+                valid = False
+                printWarning("Select", self.name, f"Invalid choice -> '{choice}'")
+        
+        for bPrompt in self.choicesMap.values():
+            if not bPrompt.validate(componentMap):
+                valid = False
+        
+        return valid
+    
+    def setValue(self, *values) -> int:
+        offset = super().setValue(*values)
+
+        self.choice = values[offset]
+        offset += 1
+
+        for choice in self.choicesMap:
+            offset += self.choicesMap[choice].setValue(*values[offset:])
+        
+        return offset
+    
+    def getUpdate(self, reset: bool = False, *values) -> tuple[list, int]:
+        updates, offset = super().getUpdate(reset, *values)
+        
+        choice: str | list[str] = self._getValueFromArgs(values, offset, reset, self.choice, self.buildDefaultChoice())
+        updates.append(choice)
+        offset += 1
+        
+        choice_list: list[str] = []
+        if type(choice) is not list:
+            choice_list.append(choice)
+        else:
+            choice_list = choice
+        
+        updates.append(self.ui_outputs[offset].update(visible = len(choice_list) > 0 and choice_list[0] is not None and choice_list[0] != self._empty_choice_text))
+        for c in self.choicesMap.keys():
+            bPrompt = self.choicesMap[c]
+            
+            visible = c in choice
+            
+            updates += bPrompt.getUpdate(reset, None, visible)[0]
+        
+        return updates, offset
+    
+    def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
+        updates, offset = super().getUpdateRandom(*currentValues)
+
+        choices = list(self.choicesMap.keys())
+        
+        randomChoice: str | list[str] = currentValues[offset]
+        if len(choices) > 0:
+            if self.multiselect:
+                randomChoice = []
+
+                cMax = len(choices)
+                if self._random_maxChoices > 0 and self._random_maxChoices < cMax:
+                    cMax = self._random_maxChoices
+                
+                r = random.randint(0, cMax)
+                if r > 0:
+                    for c in range(r):
+                        i = random.randint(0, len(choices) - 1)
+                        randomChoice.append(choices.pop(i))
+            else:
+                r = random.randint(0, len(choices) - 1)
+                randomChoice = choices[r]
+        
+        updates.append(randomChoice)
+        offset += 1
+        
+        randomChoiceList: list[str] = []
+        if type(randomChoice) is not list:
+            randomChoice.append(randomChoice)
+        else:
+            randomChoiceList = randomChoice
+        
+        updates.append(self.ui_outputs[offset].update(visible = len(randomChoiceList) > 0 and randomChoiceList[0] != self._empty_choice_text))
+        for c in self.choicesMap.keys():
+            bPrompt = self.choicesMap[c]
+
+            visible = c in randomChoiceList
+            
+            ###UGH
+            updates += bPrompt.getUpdateRandom(currentValues[offset], visible, currentValues[offset + 2:])
+        
+        return updates, offset
+    
+    def buildSelf(self, inputs: list[typing.Any], outputs: list[typing.Any], extra: list[typing.Any]) -> None:
+        self.choicesMap = self.buildChoicesMap()
+        self.choice = self.buildDefaultChoice()
+        
+        choices = list(self.choicesMap.keys())
+
+        bPrompts_inputs: list = []
+        bPrompts_outputs: list = []
+        bPrompts_extra: list = []
+
+        with gr.Column(
+            scale = self.scale
+            , min_width = 160
+        ):
+            dropdown = gr.Dropdown(
+                label = self.name
+                , choices = self.choicesMap.keys()
+                , multiselect = self.multiselect
+                , value = self.choice
+                , allow_custom_value = False
+                , visible = self.visible
+            )
+            inputs.append(dropdown)
+            outputs.append(dropdown)
+
+            container = gr.Row(
+                variant = "panel"
+                , visible = self.choice is not None and len(self.choice) > 0 and self.choice != self._empty_choice_text
+            )
+            outputs.append(container)
+            with container:
+                for choice in choices:
+                    bPrompt = self.choicesMap[choice]
+                    bPrompt.buildUI()
+
+                    bPrompts_inputs += bPrompt.ui_inputs
+                    bPrompts_outputs += bPrompt.ui_outputs
+                    bPrompts_extra += bPrompt.ui_extra
+        
+        def _update(choice: str | list[str]):
+            choices_selected: list[str] = []
+            if type(choice) is not list:
+                if choice != self._empty_choice_text:
+                    choices_selected = [choice]
+            else:
+                choices_selected = choice
+            
+            updates: list = [container.update(visible = len(choices_selected) > 0)]
+            for c in self.choicesMap:
+                bPrompt = self.choicesMap[c]
+
+                visible = c in choices_selected
+
+                updates += bPrompt.getUpdate(False, None, visible)[0]
+            
+            return updates
+        
+        dropdown.input(
+            fn = _update
+            , inputs = dropdown
+            , outputs = [container] + bPrompts_outputs
+        )
+
+        inputs += bPrompts_inputs
+        outputs += bPrompts_outputs
+        extra += bPrompts_extra
+    
+    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict) -> None:
+        bPrompts: list[B_Prompt_Simple_] = []
+
+        if type(self.choice) is not list:
+            bPrompts.append(self.choicesMap.get(self.choice, None))
+        else:
+            for c in self.choice:
+                bPrompts.append(self.choicesMap[c])
+        
+        if len(bPrompts) == 0 or bPrompts[0] is None:
+            return
+        
+        for bPrompt in bPrompts:
+            bPrompt.handlePrompt(p, componentMap)
+    
+    def addChoice(self, prompt: B_Prompt_Simple_):
+        self.choicesList.append(prompt)
+
+    def buildChoicesMap(self) -> dict[str, B_Prompt_Simple_]:
+        choicesMap: dict[str, B_Prompt_Simple_] = {}
+        
+        if not self.multiselect:
+            choicesMap[self._empty_choice_text] = B_Prompt_Simple_("", name = self._empty_choice_text)
+        
+        if self.sortChoices:
+            self.choicesList = sorted(self.choicesList, key = lambda bPrompt: bPrompt.name)
+        
+        for bPrompt in self.choicesList:
+            choicesMap[bPrompt.name] = bPrompt
+        
+        return choicesMap
+    
+    def buildDefaultChoice(self) -> str | list[str]:
+        builtChoice: str | list[str] = None if not self.multiselect else []
+        choice_default: list[str] = []
+
+        if (type(self.choice_default) is not list):
+            choice_default.append(self.choice_default)
+        else:
+            choice_default = self.choice_default
+        
+        if len(self.choicesMap) > 0:
+            choices = list(self.choicesMap)
+            if self.multiselect:
+                if choice_default[0] is not None:
+                    for choice in choice_default:
+                        if choice in choices:
+                            builtChoice.append(choice)
+            else:
+                choice_default_first = choice_default[0]
+                if choice_default_first is not None and choice_default_first in choices:
+                    builtChoice = choice_default_first
+                else:
+                    builtChoice = choices[0]
+        
+        return builtChoice
+
+class B_UI_Container_(B_UI_, ABC):
+    def __init__(self, items: list[B_UI_] = [], buildResetButton: bool = False, buildRandomButton: bool = False, name: str = "Container"):
+        super().__init__(name)
+
+        self.items = items
+        self.buildResetButton = buildResetButton
+        self.buildRandomButton = buildRandomButton
+    
+    def finalizeUI(self, componentMap: dict) -> None:
+        super().finalizeUI(componentMap)
+        
+        for bUi in self.items:
+            bUi.finalizeUI(componentMap)
+    
+    def validate(self, componentMap: dict) -> bool:
+        valid = True
+
+        for bUi in self.items:
+            if not bUi.validate(componentMap):
+                valid = False
+        
+        return valid
+    
+    def setValue(self, *values) -> int:
+        offset = super().setValue(*values)
+        
+        for bUi in self.items:
+            offset += bUi.setValue(offset, *values[offset:])
+        
+        return offset
+    
+    def getUpdate(self, reset: bool = False, *values) -> tuple[list, int]:
+        updates, offset = super().getUpdate(reset, *values)
+        
+        for bUi in self.items:
+            bUi_updates, bUi_offset = bUi.getUpdate(reset, *values[offset:])
+            updates += bUi_updates
+            offset += bUi_offset
+        
+        return updates, offset
+    
+    def getUpdateRandom(self, *currentValues) -> tuple[list, int]:
+        updates, offset = super().getUpdateRandom(*currentValues)
+
+        for bUi in self.items:
+            bUi_updates, bUi_offset = bUi.getUpdateRandom(*currentValues[offset:])
+            updates += bUi_updates
+            offset += bUi_offset
+        
+        return updates, offset
+    
+    def buildSelf(self, inputs: list[typing.Any], outputs: list[typing.Any], extra: list[typing.Any]) -> None:
+        container = self.buildContainer(self.visible)
+        extra.append(container)
+
+        items_inputs: list = []
+        items_outputs: list = []
+        items_extra: list = []
+        
+        with container:
+            for item in self.items:
+                item.buildUI()
+
+                items_inputs += item.ui_inputs
+                items_outputs += item.ui_outputs
+                items_extra += item.ui_extra
+            
+            if self.buildResetButton or self.buildRandomButton:
+                def _buildRandomButton() -> typing.Any:
+                    btnRandom = gr.Button(value = f"Randomize {self.name}")
+                    btnRandom.click(
+                        fn = lambda *currentValues: self.getUpdateRandom(*currentValues)[0]
+                        , inputs = items_inputs
+                        , outputs = items_outputs
+                    )
+                    return btnRandom
+                
+                def _buildResetButton() -> typing.Any:
+                    btnReset = gr.Button(value = f"Reset {self.name}")
+                    btnReset.click(
+                        fn = lambda: self.getUpdate(True)[0]
+                        , outputs = items_outputs
+                    )
+                    return btnReset
+                
+                B_UI_Markdown_._buildSeparator()
+
+                if self.buildResetButton and self.buildRandomButton:
+                    with gr.Row():
+                        with gr.Column():
+                            outputs.append(_buildRandomButton())
+                        with gr.Column():
+                            outputs.append(_buildResetButton())
+                elif self.buildRandomButton:
+                    outputs.append(_buildRandomButton())
+                elif self.buildResetButton:
+                    outputs.append(_buildResetButton())
+        
+        inputs += items_inputs
+        outputs += items_outputs
+        extra += items_extra
+    
+    def handlePrompt(self, p: StableDiffusionProcessing, componentMap: dict) -> None:
+        for bUi in self.items:
+            bUi.handlePrompt(componentMap)
+    
+    def addItem(self, item: B_UI_) -> None:
+        self.items.append(item)
+    
+    @abstractmethod
+    def buildContainer(self, visible: bool) -> typing.Any:
+        pass
 
 class B_UI(ABC):
     _identifier: int = 0
