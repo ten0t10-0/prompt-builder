@@ -113,11 +113,15 @@ class Gr_Input(Gr_Output, ABC):
         if reset and self.value is None:
             self.syncInput(self.buildDefaultValue())
         
-        return self.gr.update(value = self.value)
+        return self.getUpdate(self.value)
     
     def buildDefaultValue(self) -> typing.Any:
         """VIRTUAL: Base -> self.value_default"""
         return self.value_default
+    
+    def getUpdate(self, value: typing.Any) -> typing.Any:
+        """VIRTUAL"""
+        return self.gr.update(value = value)
 
 class Gr_Textbox(Gr_Input):
     def __init__(self, label: str = "Textbox", value_default: str = "") -> None:
@@ -152,6 +156,9 @@ class Gr_Number(Gr_Input):
             , minimum = self.value_min
             , step = self.value_step
         )
+    
+    def getUpdate(self, value: typing.Any) -> typing.Any:
+        return self.gr.update(value = value, step = self.value_step)
 
 class Gr_Checkbox(Gr_Input):
     def __init__(self, label: str = "Checkbox", value_default: bool = False) -> None:
@@ -470,6 +477,10 @@ class B_Ui_Separator(B_Ui):
         return B_Ui_Separator(
             hidden = bool(int(args.get("hide", 0)))
         )
+    
+    @staticmethod
+    def _build() -> None:
+        Gr_Markdown(B_Ui_Separator._html_separator).initGr()
     
     def __init__(self, name: str = "Separator", hidden: bool = False) -> None:
         super().__init__(name, hidden)
@@ -1536,7 +1547,7 @@ class B_Ui_Map():
         gr_list: list[typing.Any] = []
 
         # PRESETS
-        # B_UI_Markdown._buildSeparator()
+        # B_Ui_Separator._build()
 
         # with gr.Accordion("Presets", open = False):
         #     i = 0
@@ -1545,17 +1556,17 @@ class B_Ui_Map():
 
         #         i += 1
         #         if i < len(self.presets) and preset.visible:
-        #             B_UI_Markdown._buildSeparator()
+        #             B_Ui_Separator._build()
 
         # LAYOUT
-        #B_Ui_Separator._build()
+        B_Ui_Separator._build()
         
         for x in self.layout:
             x.initUI()
             gr_list += list(map(lambda gr_output: gr_output.gr, x.getOutput(True)))
         
         # SETTINGS
-        #B_Ui_Separator._build()
+        B_Ui_Separator._build()
 
         with gr.Accordion("Settings", open = False):
             btnClearConfig = gr.Button("Clear config")
