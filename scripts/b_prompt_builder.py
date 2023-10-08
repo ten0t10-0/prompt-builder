@@ -89,6 +89,16 @@ class Gr_Input(Gr_Output, ABC):
 
         self.value = self.buildDefaultValue()
     
+    def validate(self) -> bool:
+        valid = super().validate()
+
+        valid_value, valid_message = self.validateValue(self.value_default, "Default value")
+        if not valid_value:
+            valid = False
+            self.printWarning(valid_message)
+        
+        return valid
+    
     def syncInput(self, value: typing.Any):
         self.value = value
     
@@ -106,6 +116,10 @@ class Gr_Input(Gr_Output, ABC):
     def buildDefaultValue(self) -> typing.Any:
         """VIRTUAL: Base -> self.value_default"""
         return self.value_default
+    
+    def validateValue(self, value: typing.Any, value_name: str = "Value") -> tuple[bool, str]:
+        """VIRTUAL: Returns valid, message, Base -> True, None"""
+        return True, None
     
     def getUpdate(self, value: typing.Any) -> typing.Any:
         """VIRTUAL: Base -> value"""
@@ -128,14 +142,16 @@ class Gr_Number(Gr_Input):
         self.value_min = value_min
         self.value_step = value_step
     
-    def validate(self) -> bool:
-        valid = super().validate()
-
-        if self.value_default < self.value_min:
-            valid = False
-            self.printWarning(f"Default value ({self.value_default}) is under minimum ({self.value_min})")
+    def validateValue(self, value: typing.Any, value_name: str = "Value") -> tuple[bool, str]:
+        if type(value) is not float and type(value) is not int:
+            return False, f"{value_name} ({value}) is not a float | int"
         
-        return valid
+        value_f: float = value
+
+        if value_f < self.value_min:
+            return False, f"{value_name} ({value_f} is under minimum ({self.value_min}))"
+        
+        return super().validateValue(value, value_name)
     
     def buildGr(self) -> typing.Any:
         return gr.Number(
@@ -166,18 +182,19 @@ class Gr_Slider(Gr_Input):
         self.value_max = value_max
         self.value_step = value_step
     
-    def validate(self) -> bool:
-        valid = super().validate()
+    def validateValue(self, value: typing.Any, value_name: str = "Value") -> tuple[bool, str]:
+        if type(value) is not int:
+            return False, f"{value_name} ({value}) is not an int"
+        
+        value_int: int = value
 
-        if self.value_default < self.value_min:
-            valid = False
-            self.printWarning(f"Default value ({self.value_default}) is under minimum ({self.value_min})")
+        if value_int < self.value_min:
+            return False, f"{value_name} ({self.value_default}) is under minimum ({self.value_min})"
         
-        if self.value_default > self.value_max:
-            valid = False
-            self.printWarning(f"Default value ({self.value_default}) is over maximum ({self.value_max})")
+        if value_int > self.value_max:
+            return False, f"{value_name} ({self.value_default}) is over maximum ({self.value_max})"
         
-        return valid
+        return super().validateValue(value, value_name)
     
     def buildGr(self) -> typing.Any:
         return gr.Slider(
@@ -195,29 +212,28 @@ class Gr_Dropdown(Gr_Input):
         self.choices = choices if choices is not None else []
         self.multiselect = multiselect
     
-    def validate(self) -> bool:
-        valid = super().validate()
-
+    def validateValue(self, value: typing.Any, value_name: str = "Choice(s)") -> tuple[bool, str]:
+        if value is not None and type(value) is not str and type(value) is not list:
+            return False, f"{value_name} ({value}) is not a str | list | None"
+        
         if len(self.choices) > 0:
             if (
-                self.value_default is not None
+                value is not None
                 and (
                     (
-                        type(self.value_default) is not list
-                        and self.value_default not in self.choices
+                        type(value) is not list
+                        and value not in self.choices
                     ) or (
-                        type(self.value_default) is list
-                        and any(map(lambda c: c not in self.choices, self.value_default))
+                        type(value) is list
+                        and any(map(lambda c: c not in self.choices, value))
                     )
                 )
             ):
-                valid = False
-                self.printWarning(f"Invalid default choice(s) -> {self.value_default}")
-        elif self.value_default is not None:
-            valid = False
-            self.printWarning(f"No choices set but default choice(s) set -> {self.value_default}")
+                return False, f"Invalid {value_name} -> {value}"
+        elif value is not None:
+            return False, f"No choices set but {value_name} set -> {value}"
         
-        return valid
+        return super().validateValue(value, value_name)
     
     def buildDefaultValue(self) -> typing.Any:
         value_default = super().buildDefaultValue()
@@ -1201,6 +1217,7 @@ class B_Ui_Prompt_Range_Link(B_Ui):
             , name_link = args.get("link", None)
             , prompt_a = args.get("a", "")
             , prompt_b = args.get("b", "")
+            , hidden = bool(int(args.get("hide", 0)))
         )
     
     def __init__(
