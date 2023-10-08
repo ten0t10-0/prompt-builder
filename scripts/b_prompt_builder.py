@@ -391,7 +391,7 @@ class B_Ui(ABC):
         """VIRTUAL: Base -> Gr_Group"""
         return Gr_Group(visible, f"{self.name} (Group)")
     
-    def validate(self) -> bool:
+    def validate(self, inputMap: dict[str, Gr_Input]) -> bool:
         """VIRTUAL: Base -> validate own Gr_Outputs"""
         valid = True
         
@@ -478,11 +478,11 @@ class B_Ui_Collection(B_Ui, ABC):
 
         self.ui_container_contents: Gr_Container = None
     
-    def validate(self) -> bool:
-        valid = super().validate()
+    def validate(self, inputMap: dict[str, Gr_Input]) -> bool:
+        valid = super().validate(inputMap)
 
         for x in self.items:
-            if not x.validate():
+            if not x.validate(inputMap):
                 valid = False
         
         return valid
@@ -736,10 +736,10 @@ class B_Ui_Container_Accordion(B_Ui_Container):
     def initContainer(self, visible: bool) -> Gr_Container:
         return Gr_Accordion(name = self.name, visible = visible)
 
-class B_Ui_PromptSingle(B_Ui):
+class B_Ui_Prompt_Single(B_Ui):
     @staticmethod
     def _fromArgs(name: str = None, **args: str):
-        return B_Ui_PromptSingle(
+        return B_Ui_Prompt_Single(
             name = name
             , prefix = args.get("prefix", "")
             , postfix = args.get("postfix", "")
@@ -826,10 +826,10 @@ class B_Ui_PromptSingle(B_Ui):
         else:
             p.negative_prompt = promptAdded(p.negative_prompt, prompt)
 
-class B_Ui_PromptDual(B_Ui):
+class B_Ui_Prompt_Dual(B_Ui):
     @staticmethod
     def _fromArgs(name: str = None, **args: str):
-        return B_Ui_PromptDual(
+        return B_Ui_Prompt_Dual(
             name = name
             , prompt_positive = args.get("vp", "")
             , prompt_negative = args.get("vn", "")
@@ -896,14 +896,14 @@ class B_Ui_PromptDual(B_Ui):
         p.prompt = promptAdded(p.prompt, prompt_positive)
         p.negative_prompt = promptAdded(p.negative_prompt, prompt_negative)
 
-class B_Ui_PromptRange(B_Ui):
+class B_Ui_Prompt_Range(B_Ui):
     _value_min: int = -1
     _value_max: int = 100
     _value_step: int = 1
     
     @staticmethod
     def _fromArgs(name: str = None, **args: str):
-        return B_Ui_PromptRange(
+        return B_Ui_Prompt_Range(
             name = name
             , prompt_a = args.get("a", "")
             , prompt_b = args.get("b", "")
@@ -983,7 +983,7 @@ class B_Ui_PromptRange(B_Ui):
             )
 
             self.ui_button_b.gr.click(
-                fn = lambda: 100
+                fn = lambda: self.ui_range.value_max
                 , outputs = self.ui_range.gr
             )
     
@@ -1014,7 +1014,7 @@ class B_Ui_PromptRange(B_Ui):
         else:
             p.negative_prompt = promptAdded(p.negative_prompt, prompt)
 
-class B_Ui_PromptSelect(B_Ui_Collection):
+class B_Ui_Prompt_Select(B_Ui_Collection):
     _choice_empty: str = "-"
     _random_choices_max: int = 5
 
@@ -1024,7 +1024,7 @@ class B_Ui_PromptSelect(B_Ui_Collection):
         if choices_default is not None and len(choices_default) > 0:
             choices_default = list(map(lambda v: v.strip(), choices_default.split(","))) #! str | list[str]?
         
-        return B_Ui_PromptSelect(
+        return B_Ui_Prompt_Select(
             name = name
             , choices_sort = bool(int(args.get("sort", 1)))
             , choices_default = choices_default
@@ -1037,9 +1037,9 @@ class B_Ui_PromptSelect(B_Ui_Collection):
     
     #! conflicting names...
     @staticmethod
-    def _buildColorChoicesList(postfix: str = "") -> list[B_Ui_PromptSingle]:
+    def _buildColorChoicesList(postfix: str = "") -> list[B_Ui_Prompt_Single]:
         return list(map(
-            lambda text: B_Ui_PromptSingle(
+            lambda text: B_Ui_Prompt_Single(
                 name = text
                 , prompt_ui_build = False
                 , postfix = postfix
@@ -1193,6 +1193,84 @@ class B_Ui_PromptSelect(B_Ui_Collection):
         choice = x.name
         return choice_current is not None and (choice == choice_current or choice in choice_current)
 
+class B_Ui_Prompt_Range_Link(B_Ui):
+    @staticmethod
+    def _fromArgs(name: str = None, **args: str):
+        return B_Ui_Prompt_Range_Link(
+            name = name
+            , name_link = args.get("link", None)
+            , prompt_a = args.get("a", "")
+            , prompt_b = args.get("b", "")
+        )
+    
+    def __init__(
+            self
+            , name: str
+            , name_link: str
+            , prompt_a: str
+            , prompt_b: str
+            , hidden: bool = False
+        ) -> None:
+        super().__init__(f"{name} {{LINK: {name_link}}}", hidden)
+
+        self.name_original = name
+        self.name_link = name_link
+        self.prompt_a = prompt_a
+        self.prompt_b = prompt_b
+
+        self.ui: Gr_Markdown = None
+    
+    def init(self, gr_outputs: list[Gr_Output], gr_outputs_extras: list[Gr_Output]) -> None:
+        self.ui = Gr_Markdown(f"**{self.name_original}**")
+    
+    def validate(self, inputMap: dict[str, Gr_Input]) -> bool:
+        valid = super().validate(inputMap)
+
+        if self.name_link is None or len(self.name_link) == 0:
+            printWarning(self.__class__.__name__, self.name_original, f"Invalid link name -> {self.name_link}")
+            return False
+
+        gr_input_link = inputMap.get(self.name_link, None)
+
+        if gr_input_link is None:
+            printWarning(self.__class__.__name__, self.name_original, f"No input found with linked name -> '{self.name_link}'")
+            return False
+        
+        if type(gr_input_link) is not Gr_Slider:
+            valid = False
+            printWarning(self.__class__.__name__, self.name_original, f"Linked input type is invalid -> {gr_input_link.__class__.__name__}")
+        
+        return valid
+    
+    def buildUI(self) -> None:
+        self.ui.initGr()
+    
+    def handlePrompt(self, p: StableDiffusionProcessing, inputMap: dict[str, Gr_Input]) -> None:
+        gr_input_link: Gr_Slider = inputMap[self.name_link]
+        gr_input_link_negative: Gr_Checkbox = inputMap[f"{self.name_link} (N)"] #!
+
+        prompt_a = promptSanitized(self.prompt_a)
+        prompt_b = promptSanitized(self.prompt_b)
+
+        negative = bool(gr_input_link_negative.value) #!
+
+        value = float(gr_input_link.value)
+        value = round(value / 100, 2)
+        value = 1 - value
+
+        prompt: str = None
+        if value == 1:
+            prompt = prompt_a
+        elif value == 0:
+            prompt = prompt_b
+        else:
+            prompt = f"[{prompt_a}:{prompt_b}:{value}]"
+        
+        if not negative:
+            p.prompt = promptAdded(p.prompt, prompt)
+        else:
+            p.negative_prompt = promptAdded(p.negative_prompt, prompt)
+
 # class B_UI_Prompt(B_UI, ABC):
 #     #!
 #     def setPreset(self, preset: typing.Any):
@@ -1257,7 +1335,7 @@ class B_Ui_Map():
         layout: list[B_Ui] = []
         
         stack_containers: list[B_Ui_Container] = []
-        stack_selects: list[B_Ui_PromptSelect] = []
+        stack_selects: list[B_Ui_Prompt_Select] = []
         #! stack_select_choices: list[B_UI_Prompt] = []
 
         skip = 0
@@ -1341,26 +1419,32 @@ class B_Ui_Map():
                         if ignore:
                             continue
 
-                        _build(B_Ui_PromptSingle._fromArgs(l_name, **l_args))
+                        _build(B_Ui_Prompt_Single._fromArgs(l_name, **l_args))
                     
                     case "DUAL":
                         if ignore:
                             continue
 
-                        _build(B_Ui_PromptDual._fromArgs(l_name, **l_args))
+                        _build(B_Ui_Prompt_Dual._fromArgs(l_name, **l_args))
                     
                     case "RANGE":
                         if ignore:
                             continue
                         
-                        _build(B_Ui_PromptRange._fromArgs(l_name, **l_args))
+                        _build(B_Ui_Prompt_Range._fromArgs(l_name, **l_args))
+                    
+                    case "RANGE_LINK":
+                        if ignore:
+                            continue
+                        
+                        _build(B_Ui_Prompt_Range_Link._fromArgs(l_name, **l_args))
                     
                     case "SELECT":
                         if ignore:
                             skip += 1
                             continue
                         
-                        stack_selects.append(B_Ui_PromptSelect._fromArgs(l_name, **l_args))
+                        stack_selects.append(B_Ui_Prompt_Select._fromArgs(l_name, **l_args))
                     
                     case "CHOICES":
                         if ignore:
@@ -1469,7 +1553,7 @@ class B_Ui_Map():
         valid: bool = True
 
         for x in self.layout:
-            if not x.validate():
+            if not x.validate(self.inputMap):
                 valid = False
         
         # for preset in self.presets.values():

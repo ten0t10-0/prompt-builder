@@ -1,7 +1,7 @@
 GROUP All --build_reset_button 1 --build_random_button 1
 	TAB Some Tab
 		ACCORDION Some Accordion
-			SINGLE Positive prompt
+			SINGLE Positive prompt --s 1.3
 			
 			SINGLE Negative prompt --n 1 --v promptA, promptB
 		END
@@ -51,7 +51,7 @@ GROUP All --build_reset_button 1 --build_random_button 1
 				END
 
 				SELECT Some Unsorted Dropdown --multi_select 1 --sort 0
-					#CHOICE Some Special Choice --link_type SLIDER --link_target SomethingA - SomethingB --a promptX --b promptY
+					RANGE_LINK Some Special Choice --link SomethingA - SomethingB --a promptX --b promptY
 					DUAL ChoiceB --vp promptB
 					DUAL ChoiceA --vp promptA
 				END
