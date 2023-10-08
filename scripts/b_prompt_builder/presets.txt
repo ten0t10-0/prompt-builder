@@ -1,14 +1,14 @@
 PRESET Some Full Preset
 	SET Positive prompt --v promptA
 	SET Some Dropdown --v ChoiceB, ChoiceC
-	SET Some Unsorted Dropdown --v Some Special Choice
+	SET Some Unsorted Dropdown --v Some Special Choice {LINK: SomethingA - SomethingB}
 	SET SomethingA - SomethingB --v 50
 END
 
 PRESET Some Additive Preset --is_additive 1
 	SET Positive prompt --v promptA
 	SET Some Dropdown --v ChoiceB, ChoiceC
-	SET Some Unsorted Dropdown --v Some Special Choice
+	SET Some Unsorted Dropdown --v Some Special Choice {LINK: SomethingA - SomethingB}
 	SET SomethingA - SomethingB --v 50
 END
 
