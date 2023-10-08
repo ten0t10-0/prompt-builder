@@ -345,11 +345,11 @@ class B_Ui(ABC):
         with self.gr_container.gr:
             self.buildUI()
     
-    def getInput(self) -> list[Gr_Input]:
+    def getInput(self, include_unbuilt: bool = False) -> list[Gr_Input]:
         gr_list: list[Gr_Input] = []
         
         for gr_output in self.gr_outputs:
-            if gr_output.is_input and gr_output.isGrBuilt():
+            if gr_output.is_input and (include_unbuilt or gr_output.isGrBuilt()):
                 gr_list.append(gr_output)
 
         return gr_list
@@ -499,11 +499,11 @@ class B_Ui_Collection(B_Ui, ABC):
         
         return offset
     
-    def getInput(self) -> list[Gr_Input]:
-        gr_inputs = super().getInput()
+    def getInput(self, include_unbuilt: bool = False) -> list[Gr_Input]:
+        gr_inputs = super().getInput(include_unbuilt)
 
         for x in self.items:
-            gr_inputs += x.getInput()
+            gr_inputs += x.getInput(include_unbuilt)
         
         return gr_inputs
     
@@ -1244,7 +1244,7 @@ class B_Ui_Map():
         #! confirm accuracy:
         self.inputMap: dict[str, Gr_Input] = {}
         for x in self.layout:
-            for gr_input in x.getInput():
+            for gr_input in x.getInput(True):
                 if gr_input.name in self.inputMap:
                     printWarning("B_Ui_Map", "inputMap", f"Duplicate Gr_Input -> {gr_input.name}")
                 
