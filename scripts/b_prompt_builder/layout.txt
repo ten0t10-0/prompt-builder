@@ -27,10 +27,10 @@ GROUP All --build_reset_button 1 --build_random_button 1
 			END
 		END
 		
-		#SELECT Some Dropdown With Prefix and Postfix --prefix somePrefix --postfix somePostfix
-			#DUAL ChoiceA --vp promptA
-			#DUAL ChoiceB --vn promptA
-		#END
+		SELECT Some Dropdown With Prefix and Postfix --prefix somePrefix --postfix somePostfix
+			SINGLE ChoiceA --v promptA
+			SINGLE ChoiceB --v promptB
+		END
 	END
 
 	TAB Some Tagged Tab --x 1 --build_reset_button 0

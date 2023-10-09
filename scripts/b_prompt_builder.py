@@ -1259,7 +1259,7 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
     _random_choices_max: int = 5
 
     @staticmethod
-    def _paramsFromArgs(args: dict[str, str]) -> tuple[bool, str | list[str], bool, bool, bool, int, bool]:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple[bool, str | list[str], bool, bool, bool, int, str, str, bool]:
         choices_default = args.get("v", None)
         if choices_default is not None and len(choices_default) > 0:
             choices_default = list(map(lambda v: v.strip(), choices_default.split(","))) #! str | list[str]?
@@ -1269,13 +1269,15 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
         custom = bool(int(args.get("allow_custom", 0)))
         simple = bool(int(args.get("simple", 0)))
         scale = int(args.get("scale", 1))
+        prefix = args.get("prefix", None)
+        postfix = args.get("postfix", None)
         hidden = bool(int(args.get("hide", 0)))
 
-        return choices_sort, choices_default, multiselect, custom, simple, scale, hidden
+        return choices_sort, choices_default, multiselect, custom, simple, scale, prefix, postfix, hidden
 
     @staticmethod
     def _fromArgs(args: dict[str, str], name: str = None):
-        choices_sort, choices_default, multiselect, custom, simple, scale, hidden = B_Ui_Prompt_Select._paramsFromArgs(args)
+        choices_sort, choices_default, multiselect, custom, simple, scale, prefix, postfix, hidden = B_Ui_Prompt_Select._paramsFromArgs(args)
         return B_Ui_Prompt_Select(
             name = name
             , choices_sort = choices_sort
@@ -1284,6 +1286,8 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
             , custom = custom
             , simple = simple
             , scale = scale
+            , prefix = prefix
+            , postfix = postfix
             , hidden = hidden
         )
     
@@ -1334,12 +1338,16 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
             , custom: bool = False #!
             , simple: bool = False #!
             , scale: int = 1 #!
+            , prefix: str = None
+            , postfix: str = None
             , hidden: bool = False
         ) -> None:
         super().__init__(name, choices, choices_sort, hidden)
 
         self.choices_default = choices_default if choices_default is not None or not multiselect else []
         self.multiselect = multiselect
+        self.prefix = prefix
+        self.postfix = postfix
 
         self.choicesMap: dict[str, B_Ui] = {}
         self.choicesContainerMap: dict[str, Gr_Column] = {}
@@ -1350,14 +1358,20 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
     def init(self, gr_outputs: list[Gr_Output], gr_outputs_extras: list[Gr_Output], bMap: dict[str, B_Ui]) -> None:
         super().init(gr_outputs, gr_outputs_extras, bMap)
 
-        # INIT choicesMap + choices_list
+        # INIT choicesMap + choices_list + extras
         choices_list: list[str] = []
+        
         if not self.multiselect:
             choices_list.append(self._choice_empty)
 
         for x in self.items:
             choices_list.append(x.name)
+
             self.choicesMap[x.name] = x
+            
+            if type(x) is B_Ui_Prompt_Single:
+                x.prefix = self.prefix
+                x.postfix = self.postfix
 
         # INIT choicesPresetMap
         for preset in self.choicesPresetMap.values():
@@ -1381,6 +1395,8 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
             , custom: bool
             , simple: bool
             , scale: int
+            , prefix: str
+            , postfix: str
             , hidden: bool
         ) -> list[tuple[bool, str]]:
         return [
@@ -1395,6 +1411,8 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
             , custom: bool
             , simple: bool
             , scale: int
+            , prefix: str
+            , postfix: str
             , hidden: bool
         ) -> None:
         self.ui_dropdown.syncInput(choices_selected)
