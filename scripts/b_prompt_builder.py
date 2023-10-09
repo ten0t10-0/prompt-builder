@@ -65,7 +65,6 @@ class Gr_Wrapper(ABC):
     def buildGr(self) -> typing.Any:
         pass
 
-#!!!
 class Gr_Markdown(Gr_Wrapper):
     def __init__(self, value: str, name: str = "Markdown") -> None:
         super().__init__(name, False)
@@ -160,9 +159,6 @@ class Gr_Number(Gr_Input):
             , minimum = self.value_min
             , step = self.value_step
         )
-    
-    # def getUpdate(self, value: typing.Any) -> typing.Any:
-    #     return self.gr.update(value = value, step = self.value_step)
 
 class Gr_Checkbox(Gr_Input):
     def __init__(self, label: str = "Checkbox", value_default: bool = False) -> None:
@@ -340,21 +336,26 @@ class Gr_Accordion(Gr_Container):
 class B_Ui(ABC):
     @staticmethod
     @abstractmethod
-    def _paramsFromArgs(**args: str) -> tuple:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple:
         pass
 
     @staticmethod
     @abstractmethod
-    def _fromArgs(name: str = None, **args: str):
+    def _fromArgs(args: dict[str, str], name: str = None):
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def _getDefaultName() -> str:
         pass
     
-    def __init__(self, name: str, hidden: bool = False) -> None:
-        self.name = name
+    def __init__(self, name: str = None, hidden: bool = False) -> None:
+        self.name = name if name is not None and len(name.strip()) > 0 else self._getDefaultName()
         self.hidden = hidden
 
         self.gr_container: Gr_Container = None
         self.gr_outputs: list[Gr_Output] = []
-        self.gr_outputs_extras: list[Gr_Output] = [] #!
+        self.gr_outputs_extras: list[Gr_Output] = []
     
     def init_main(self, bMap: dict) -> None:
         self.gr_container = self.initContainer(not self.hidden)
@@ -468,22 +469,26 @@ class B_Ui_Separator(B_Ui):
     _html_separator: str = "<hr style=\"margin: 0.5em 0; border-style: dotted; border-color: var(--border-color-primary);\" />"
 
     @staticmethod
-    def _paramsFromArgs(**args: str) -> tuple[bool]:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple[bool]:
         hidden = bool(int(args.get("hide", 0)))
         return hidden,
     
     @staticmethod
-    def _fromArgs(name: str = None, **args: str):
-        hidden, = B_Ui_Separator._paramsFromArgs(**args)
+    def _fromArgs(args: dict[str, str], name: str = None):
+        hidden, = B_Ui_Separator._paramsFromArgs(args)
         return B_Ui_Separator(
             hidden = hidden
         )
     
     @staticmethod
+    def _getDefaultName() -> str:
+        return "Separator"
+    
+    @staticmethod
     def _build() -> None:
         Gr_Markdown(B_Ui_Separator._html_separator).initGr()
     
-    def __init__(self, name: str = "Separator", hidden: bool = False) -> None:
+    def __init__(self, name: str = None, hidden: bool = False) -> None:
         super().__init__(name, hidden)
 
         self.ui: Gr_Markdown = None
@@ -501,7 +506,7 @@ class B_Ui_Separator(B_Ui):
 class B_Ui_Collection(B_Ui, ABC):
     def __init__(
             self
-            , name: str
+            , name: str = None
             , items: list[B_Ui] = None
             , items_sort: bool = False
             , hidden: bool = False
@@ -572,7 +577,7 @@ class B_Ui_Collection(B_Ui, ABC):
         for x in self.items:
             x.handlePrompt(p, bMap)
     
-    def addItem(self, item: B_Ui):
+    def addItem(self, item: B_Ui) -> None:
         self.items.append(item)
     
     def init(self, gr_outputs: list[Gr_Output], gr_outputs_extras: list[Gr_Output], bMap: dict[str, B_Ui]) -> None:
@@ -641,7 +646,7 @@ class B_Ui_Container(B_Ui_Collection, ABC):
             self.ui_reset.gr.click(
                 fn = _fnReset
                 , outputs = list(map(lambda gr_output: gr_output.gr, self.getOutput(exclude_labeled_outputs = True)))
-            ) #!
+            )
     
     def buildGrContents_Bottom(self) -> None:
         if self.ui_reset_build and self.ui_random_build:
@@ -657,15 +662,15 @@ class B_Ui_Container(B_Ui_Collection, ABC):
 
 class B_Ui_Container_Tab(B_Ui_Container):
     @staticmethod
-    def _paramsFromArgs(**args: str) -> tuple[bool, bool, bool]:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple[bool, bool, bool]:
         reset_ui_build = bool(int(args.get("build_reset_button", 1)))
         random_ui_build = bool(int(args.get("build_random_button", 1)))
         hidden = bool(int(args.get("hide", 0)))
         return reset_ui_build, random_ui_build, hidden
     
     @staticmethod
-    def _fromArgs(name: str = None, **args: str):
-        reset_ui_build, random_ui_build, hidden = B_Ui_Container_Tab._paramsFromArgs(**args)
+    def _fromArgs(args: dict[str, str], name: str = None):
+        reset_ui_build, random_ui_build, hidden = B_Ui_Container_Tab._paramsFromArgs(args)
         return B_Ui_Container_Tab(
             name = name
             , reset_ui_build = reset_ui_build
@@ -673,9 +678,13 @@ class B_Ui_Container_Tab(B_Ui_Container):
             , hidden = hidden
         )
     
+    @staticmethod
+    def _getDefaultName() -> str:
+        return "Tab"
+    
     def __init__(
             self
-            , name: str = "Tab"
+            , name: str = None
             , items: list[B_Ui] = None
             , reset_ui_build: bool = True
             , random_ui_build: bool = True
@@ -688,24 +697,28 @@ class B_Ui_Container_Tab(B_Ui_Container):
 
 class B_Ui_Container_Row(B_Ui_Container):
     @staticmethod
-    def _paramsFromArgs(**args: str) -> tuple[bool, bool, bool]:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple[bool, bool, bool]:
         reset_ui_build = bool(int(args.get("build_reset_button", 0)))
         random_ui_build = bool(int(args.get("build_random_button", 0)))
         hidden = bool(int(args.get("hide", 0)))
         return reset_ui_build, random_ui_build, hidden
     
     @staticmethod
-    def _fromArgs(name: str = None, **args: str):
-        reset_ui_build, random_ui_build, hidden = B_Ui_Container_Row._paramsFromArgs(**args)
+    def _fromArgs(args: dict[str, str], name: str = None):
+        reset_ui_build, random_ui_build, hidden = B_Ui_Container_Row._paramsFromArgs(args)
         return B_Ui_Container_Row(
             reset_ui_build = reset_ui_build
             , random_ui_build = random_ui_build
             , hidden = hidden
         )
     
+    @staticmethod
+    def _getDefaultName() -> str:
+        return "Row"
+    
     def __init__(
             self
-            , name: str = "Row"
+            , name: str = None
             , items: list[B_Ui] = None
             , reset_ui_build: bool = False
             , random_ui_build: bool = False
@@ -718,7 +731,7 @@ class B_Ui_Container_Row(B_Ui_Container):
 
 class B_Ui_Container_Column(B_Ui_Container):
     @staticmethod
-    def _paramsFromArgs(**args: str) -> tuple[int, bool, bool, bool]:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple[int, bool, bool, bool]:
         scale = int(args.get("scale", 1))
         reset_ui_build = bool(int(args.get("build_reset_button", 0)))
         random_ui_build = bool(int(args.get("build_random_button", 0)))
@@ -726,8 +739,8 @@ class B_Ui_Container_Column(B_Ui_Container):
         return scale, reset_ui_build, random_ui_build, hidden
     
     @staticmethod
-    def _fromArgs(name: str = None, **args: str):
-        scale, reset_ui_build, random_ui_build, hidden = B_Ui_Container_Column._paramsFromArgs(**args)
+    def _fromArgs(args: dict[str, str], name: str = None):
+        scale, reset_ui_build, random_ui_build, hidden = B_Ui_Container_Column._paramsFromArgs(args)
         return B_Ui_Container_Column(
             scale = scale
             , reset_ui_build = reset_ui_build
@@ -735,9 +748,13 @@ class B_Ui_Container_Column(B_Ui_Container):
             , hidden = hidden
         )
     
+    @staticmethod
+    def _getDefaultName() -> str:
+        return "Column"
+    
     def __init__(
             self
-            , name: str = "Column"
+            , name: str = None
             , items: list[B_Ui] = None
             , scale: int = 1
             , reset_ui_build: bool = False
@@ -753,24 +770,28 @@ class B_Ui_Container_Column(B_Ui_Container):
 
 class B_Ui_Container_Group(B_Ui_Container):
     @staticmethod
-    def _paramsFromArgs(**args: str) -> tuple[bool, bool, bool]:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple[bool, bool, bool]:
         reset_ui_build = bool(int(args.get("build_reset_button", 0)))
         random_ui_build = bool(int(args.get("build_random_button", 0)))
         hidden = bool(int(args.get("hide", 0)))
         return reset_ui_build, random_ui_build, hidden
     
     @staticmethod
-    def _fromArgs(name: str = None, **args: str):
-        reset_ui_build, random_ui_build, hidden = B_Ui_Container_Group._paramsFromArgs(**args)
+    def _fromArgs(args: dict[str, str], name: str = None):
+        reset_ui_build, random_ui_build, hidden = B_Ui_Container_Group._paramsFromArgs(args)
         return B_Ui_Container_Group(
             reset_ui_build = reset_ui_build
             , random_ui_build = random_ui_build
             , hidden = hidden
         )
     
+    @staticmethod
+    def _getDefaultName() -> str:
+        return "Group"
+    
     def __init__(
             self
-            , name: str = "Group"
+            , name: str = None
             , items: list[B_Ui] = None
             , reset_ui_build: bool = False
             , random_ui_build: bool = False
@@ -783,24 +804,28 @@ class B_Ui_Container_Group(B_Ui_Container):
 
 class B_Ui_Container_Accordion(B_Ui_Container):
     @staticmethod
-    def _paramsFromArgs(**args: str) -> tuple[bool, bool, bool]:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple[bool, bool, bool]:
         reset_ui_build = bool(int(args.get("build_reset_button", 0)))
         random_ui_build = bool(int(args.get("build_random_button", 0)))
         hidden = bool(int(args.get("hide", 0)))
         return reset_ui_build, random_ui_build, hidden
     
     @staticmethod
-    def _fromArgs(name: str = None, **args: str):
-        reset_ui_build, random_ui_build, hidden = B_Ui_Container_Accordion._paramsFromArgs(**args)
+    def _fromArgs(args: dict[str, str], name: str = None):
+        reset_ui_build, random_ui_build, hidden = B_Ui_Container_Accordion._paramsFromArgs(args)
         return B_Ui_Container_Accordion(
             reset_ui_build = reset_ui_build
             , random_ui_build = random_ui_build
             , hidden = hidden
         )
     
+    @staticmethod
+    def _getDefaultName() -> str:
+        return "Accordion"
+    
     def __init__(
             self
-            , name: str = "Accordion"
+            , name: str = None
             , items: list[B_Ui] = None
             , reset_ui_build: bool = False
             , random_ui_build: bool = False
@@ -813,7 +838,7 @@ class B_Ui_Container_Accordion(B_Ui_Container):
 
 class B_Ui_Prompt_Single(B_Ui):
     @staticmethod
-    def _paramsFromArgs(**args: str) -> tuple[str, str, str, float, bool, bool]:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple[str, str, str, float, bool, bool]:
         prefix = args.get("prefix", "")
         postfix = args.get("postfix", "")
         prompt = args.get("v", "")
@@ -823,8 +848,8 @@ class B_Ui_Prompt_Single(B_Ui):
         return prefix, postfix, prompt, strength, negative, hidden
     
     @staticmethod
-    def _fromArgs(name: str = None, **args: str):
-        prefix, postfix, prompt, strength, negative, hidden = B_Ui_Prompt_Single._paramsFromArgs(**args)
+    def _fromArgs(args: dict[str, str], name: str = None):
+        prefix, postfix, prompt, strength, negative, hidden = B_Ui_Prompt_Single._paramsFromArgs(args)
         return B_Ui_Prompt_Single(
             name = name
             , prefix = prefix
@@ -835,9 +860,13 @@ class B_Ui_Prompt_Single(B_Ui):
             , hidden = hidden
         )
     
+    @staticmethod
+    def _getDefaultName() -> str:
+        return "Single Prompt"
+    
     def __init__(
             self
-            , name: str = "Single Prompt"
+            , name: str = None
             , prompt_ui_build: bool = True
             , strength_ui_build: bool = True
             , negative_ui_build: bool = True
@@ -909,11 +938,11 @@ class B_Ui_Prompt_Single(B_Ui):
         
         if self.ui_strength_build or self.ui_negative_build:
             with gr.Row():
-                if self.ui_negative_build:
-                    self.ui_negative.initGr()
-
                 if self.ui_strength_build:
                     self.ui_strength.initGr()
+
+                if self.ui_negative_build:
+                    self.ui_negative.initGr()
     
     def handlePrompt(self, p: StableDiffusionProcessing, bMap: dict[str, B_Ui]) -> None:
         prompt = str(self.ui_prompt.value)
@@ -942,7 +971,7 @@ class B_Ui_Prompt_Single(B_Ui):
 
 class B_Ui_Prompt_Dual(B_Ui):
     @staticmethod
-    def _paramsFromArgs(**args: str) -> tuple[str, str, float, bool]:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple[str, str, float, bool]:
         prompt_positive = args.get("vp", "")
         prompt_negative = args.get("vn", "")
         strength = float(args.get("s", 1))
@@ -950,8 +979,8 @@ class B_Ui_Prompt_Dual(B_Ui):
         return prompt_positive, prompt_negative, strength, hidden
     
     @staticmethod
-    def _fromArgs(name: str = None, **args: str):
-        prompt_positive, prompt_negative, strength, hidden = B_Ui_Prompt_Dual._paramsFromArgs(**args)
+    def _fromArgs(args: dict[str, str], name: str = None):
+        prompt_positive, prompt_negative, strength, hidden = B_Ui_Prompt_Dual._paramsFromArgs(args)
         return B_Ui_Prompt_Dual(
             name = name
             , prompt_positive = prompt_positive
@@ -960,9 +989,13 @@ class B_Ui_Prompt_Dual(B_Ui):
             , hidden = hidden
         )
     
+    @staticmethod
+    def _getDefaultName() -> str:
+        return "Dual Prompt"
+    
     def __init__(
             self
-            , name: str = "Dual Prompt"
+            , name: str = None
             , ui_prompts_build: bool = True
             , ui_strength_build: bool = True
             , prompt_positive: str = ""
@@ -1049,7 +1082,7 @@ class B_Ui_Prompt_Range(B_Ui):
     _value_step: int = 1
 
     @staticmethod
-    def _paramsFromArgs(**args: str) -> tuple[str, str, bool, bool, int, bool, str, str, bool]:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple[str, str, bool, bool, int, bool, str, str, bool]:
         prompt_a = args.get("a", "")
         prompt_b = args.get("b", "")
         required = bool(int(args.get("is_required", 0)))
@@ -1062,8 +1095,8 @@ class B_Ui_Prompt_Range(B_Ui):
         return prompt_a, prompt_b, required, negative, value, ui_buttons_build, prompt_a_button_text, prompt_b_button_text, hidden
     
     @staticmethod
-    def _fromArgs(name: str = None, **args: str):
-        prompt_a, prompt_b, required, negative, value, ui_buttons_build, prompt_a_button_text, prompt_b_button_text, hidden = B_Ui_Prompt_Range._paramsFromArgs(**args)
+    def _fromArgs(args: dict[str, str], name: str = None):
+        prompt_a, prompt_b, required, negative, value, ui_buttons_build, prompt_a_button_text, prompt_b_button_text, hidden = B_Ui_Prompt_Range._paramsFromArgs(args)
         return B_Ui_Prompt_Range(
             name = name
             , prompt_a = prompt_a
@@ -1077,11 +1110,15 @@ class B_Ui_Prompt_Range(B_Ui):
             , hidden = hidden
         )
     
+    @staticmethod
+    def _getDefaultName() -> str:
+        return "Range Prompt"
+    
     def __init__(
             self
             , prompt_a: str
             , prompt_b: str
-            , name: str = "Range Prompt"
+            , name: str = None
             , required: bool = False
             , negative: bool = False
             , value: int = None
@@ -1212,7 +1249,7 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
     _random_choices_max: int = 5
 
     @staticmethod
-    def _paramsFromArgs(**args: str) -> tuple[bool, str | list[str], bool, bool, bool, int, bool]:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple[bool, str | list[str], bool, bool, bool, int, bool]:
         choices_default = args.get("v", None)
         if choices_default is not None and len(choices_default) > 0:
             choices_default = list(map(lambda v: v.strip(), choices_default.split(","))) #! str | list[str]?
@@ -1227,8 +1264,8 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
         return choices_sort, choices_default, multiselect, custom, simple, scale, hidden
 
     @staticmethod
-    def _fromArgs(name: str = None, **args: str):
-        choices_sort, choices_default, multiselect, custom, simple, scale, hidden = B_Ui_Prompt_Select._paramsFromArgs(**args)
+    def _fromArgs(args: dict[str, str], name: str = None):
+        choices_sort, choices_default, multiselect, custom, simple, scale, hidden = B_Ui_Prompt_Select._paramsFromArgs(args)
         return B_Ui_Prompt_Select(
             name = name
             , choices_sort = choices_sort
@@ -1239,6 +1276,10 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
             , scale = scale
             , hidden = hidden
         )
+    
+    @staticmethod
+    def _getDefaultName() -> str:
+        return "Select Prompt"
     
     #! conflicting names...
     @staticmethod
@@ -1275,7 +1316,7 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
 
     def __init__(
             self
-            , name: str = "Select Prompt"
+            , name: str = None
             , choices: list[B_Ui] = None
             , choices_sort: bool = True
             , choices_default: str | list[str] = None
@@ -1292,15 +1333,27 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
 
         self.choicesMap: dict[str, B_Ui] = {}
         self.choicesContainerMap: dict[str, Gr_Column] = {}
+        self.choicesPresetMap: dict[str, B_Ui_Preset] = {}
 
         self.ui_dropdown: Gr_Dropdown = None
     
     def init(self, gr_outputs: list[Gr_Output], gr_outputs_extras: list[Gr_Output], bMap: dict[str, B_Ui]) -> None:
         super().init(gr_outputs, gr_outputs_extras, bMap)
 
-        self.initChoicesMap()
+        # INIT choicesMap + choices_list
+        choices_list: list[str] = []
+        if not self.multiselect:
+            choices_list.append(self._choice_empty)
 
-        self.ui_dropdown = Gr_Dropdown(self.name, self.buildChoicesList(), self.choices_default, self.multiselect)
+        for x in self.items:
+            choices_list.append(x.name)
+            self.choicesMap[x.name] = x
+
+        # INIT choicesPresetMap
+        for preset in self.choicesPresetMap.values():
+            preset.buildMappings(bMap)
+
+        self.ui_dropdown = Gr_Dropdown(self.name, choices_list, self.choices_default, self.multiselect)
         gr_outputs.append(self.ui_dropdown)
 
         self.ui_container_contents.visible = self.getShowContainer()
@@ -1351,7 +1404,57 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
             , outputs = list(map(lambda gr_output: gr_output.gr, self.getOutput(exclude_labeled_outputs = True)))[1:]
         )
 
-        #! Presets
+        #! Presets - potentially repeating logic from B_Ui_Preset, encapsulate some of this?
+        if len(self.choicesPresetMap) > 0:
+            bList: list[B_Ui] = []
+            for c in self.choicesPresetMap:
+                for k in self.choicesPresetMap[c].mappings:
+                    b = bMap[k]
+                    if b not in bList:
+                        bList.append(b)
+            
+            inputs: list = []
+            outputs: list = []
+            for b in bList:
+                for gr_input in b.getInput():
+                    inputs.append(gr_input.gr)
+                for gr_output in b.getOutput(exclude_labeled_outputs = True):
+                    outputs.append(gr_output.gr)
+            
+            def _apply(choices: str | list[str], *inputValues):
+                self.ui_dropdown.syncInput(choices)
+
+                if type(choices) is not list:
+                    choices: list = [choices]
+                
+                presets: list[B_Ui_Preset] = []
+                for c in choices:
+                    preset = self.choicesPresetMap.get(c, None)
+                    if preset is not None:
+                        presets.append(preset)
+                
+                updates: list = []
+                offset: int = 0
+                preset_mapping: tuple = None
+                for b in bList:
+                    for preset in presets:
+                        preset_mapping = preset.mappings.get(b.name, None)
+                        if preset_mapping is not None:
+                            break #! if 2 choices affect same element, first one prioritized
+                    
+                    if preset_mapping is not None:
+                        b.updateFromArgs(*preset_mapping)
+                        offset += b.getOutputUpdates(updates, False)
+                    else:
+                        offset += b.getOutputUpdates(updates, False, *inputValues[offset:])
+                
+                return updates
+            
+            self.ui_dropdown.gr.select(
+                fn = _apply
+                , inputs = [self.ui_dropdown.gr] + inputs
+                , outputs = outputs
+            )
     
     def initContainerContents(self, name: str) -> Gr_Container:
         return Gr_Row("panel", name = name)
@@ -1387,7 +1490,16 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
         for x in items_selected:
             x.handlePrompt(p, bMap)
     
-    def addChoices(self, **args: str):
+    def addChoicePresetMapping(self, name: str, target_name: str, target_args: dict[str, str]):
+        preset = self.choicesPresetMap.get(name, None)
+        
+        if preset is None:
+            preset = B_Ui_Preset(f"{self.name}_{name} (PRESET)", additive = True, hidden = True)
+            self.choicesPresetMap[name] = preset
+        
+        preset.addMapping(target_name, target_args)
+    
+    def addChoices(self, args: dict[str, str]):
         choicesList: list[B_Ui] = []
         
         special_type = args.get("type", "")
@@ -1400,21 +1512,6 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
         
         self.items += choicesList
     
-    def initChoicesMap(self) -> None:
-        for x in self.items:
-            self.choicesMap[x.name] = x
-    
-    def buildChoicesList(self) -> list[str]:
-        choicesList: list[str] = []
-
-        if not self.multiselect:
-            choicesList.append(self._choice_empty)
-        
-        for k in self.choicesMap:
-            choicesList.append(k)
-        
-        return choicesList
-    
     def getShowContainer(self) -> bool:
         choice_current = self.ui_dropdown.value
         return choice_current is not None and len(choice_current) > 0 and choice_current != self._choice_empty
@@ -1426,7 +1523,7 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
 
 class B_Ui_Prompt_Range_Link(B_Ui):
     @staticmethod
-    def _paramsFromArgs(**args: str) -> tuple[str, str, str, bool]:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple[str, str, str, bool]:
         name_link = args.get("link", None)
         prompt_a = args.get("a", "")
         prompt_b = args.get("b", "")
@@ -1434,8 +1531,8 @@ class B_Ui_Prompt_Range_Link(B_Ui):
         return name_link, prompt_a, prompt_b, hidden
     
     @staticmethod
-    def _fromArgs(name: str = None, **args: str):
-        name_link, prompt_a, prompt_b, hidden = B_Ui_Prompt_Range_Link._paramsFromArgs(**args)
+    def _fromArgs(args: dict[str, str], name: str = None):
+        name_link, prompt_a, prompt_b, hidden = B_Ui_Prompt_Range_Link._paramsFromArgs(args)
         return B_Ui_Prompt_Range_Link(
             name = name
             , name_link = name_link
@@ -1443,6 +1540,10 @@ class B_Ui_Prompt_Range_Link(B_Ui):
             , prompt_b = prompt_b
             , hidden = hidden
         )
+    
+    @staticmethod
+    def _getDefaultName() -> str:
+        return "Range Prompt {LINK}"
     
     def __init__(
             self
@@ -1513,23 +1614,27 @@ class B_Ui_Prompt_Range_Link(B_Ui):
 
 class B_Ui_Preset(B_Ui):
     @staticmethod
-    def _paramsFromArgs(**args: str) -> tuple[bool, bool]:
+    def _paramsFromArgs(args: dict[str, str]) -> tuple[bool, bool]:
         additive = bool(int(args.get("is_additive", 0)))
         hidden = bool(int(args.get("hide", 0)))
         return additive, hidden
     
     @staticmethod
-    def _fromArgs(name: str = None, **args: str):
-        additive, hidden = B_Ui_Preset._paramsFromArgs(**args)
+    def _fromArgs(args: dict[str, str], name: str = None):
+        additive, hidden = B_Ui_Preset._paramsFromArgs(args)
         return B_Ui_Preset(
             name = name
             , additive = additive
             , hidden = hidden
         )
     
+    @staticmethod
+    def _getDefaultName() -> str:
+        return "Preset"
+    
     def __init__(
             self
-            , name: str
+            , name: str = None
             , mappings: dict[str, tuple] = None
             , additive: bool = False
             , hidden: bool = False
@@ -1616,7 +1721,7 @@ class B_Ui_Preset(B_Ui):
     def buildMappings(self, bMap: dict[str, B_Ui]) -> None:
         if len(self.mappings_temp) > 0:
             for k in self.mappings_temp:
-                self.mappings[k] = bMap[k]._paramsFromArgs(**self.mappings_temp[k])
+                self.mappings[k] = bMap[k]._paramsFromArgs(self.mappings_temp[k])
             
             del self.mappings_temp #!
 
@@ -1625,11 +1730,6 @@ class B_Ui_Preset(B_Ui):
             printWarning(self.__class__.__name__, self.name, f"Duplicate entry ({name})")
         
         self.mappings_temp[name] = args
-
-# class B_UI_Prompt(B_UI, ABC):
-#     #!
-#     def setPreset(self, preset: typing.Any):
-#         self.preset = preset
 
 class B_Ui_Map():
     @staticmethod
@@ -1702,14 +1802,11 @@ class B_Ui_Map():
         
         stack_containers: list[B_Ui_Container] = []
         stack_selects: list[B_Ui_Prompt_Select] = []
-        #! stack_select_choices: list[B_UI_Prompt] = []
+        select_choice_has_preset: bool = False
 
         skip = 0
         
         def _build(item: B_Ui) -> None:
-            # if len(stack_select_choices) > 0:
-            #     item_select = stack_select_choices.pop()
-            
             if len(stack_selects) > 0:
                 stack_selects[-1].addItem(item)
                 return
@@ -1719,19 +1816,6 @@ class B_Ui_Map():
                 return
             
             layout.append(item)
-        
-        # def _buildDropdownChoice(dropdown_choice: tuple[str, B_UI_Preset_Builder, dict[str, str]]) -> bool:
-        #     """Returns True if choice is not None and had preset mappings"""
-        #     if dropdown_choice is not None:
-        #         l_choice_name, l_choice_preset_builder, l_choice_args = dropdown_choice
-
-        #         l_choice_args["prefix"] = builder_current_dropdown.args.get("prefix", "")
-        #         l_choice_args["postfix"] = builder_current_dropdown.args.get("postfix", "")
-
-        #         builder_current_dropdown.addChoice(l_choice_name, l_choice_preset_builder, **l_choice_args)
-        #         return len(l_choice_preset_builder.mappings) > 0
-            
-        #     return False
         
         with open(self.path_layout) as file_layout:
             line_number: int = 0
@@ -1753,11 +1837,9 @@ class B_Ui_Map():
                 
                 if l_type == "END":
                     if skip == 0:
-                        # if dropdown_current_choice is not None:
-                        #     had_mappings = _buildDropdownChoice(dropdown_current_choice)
-                        #     dropdown_current_choice = None
-                        #     if had_mappings:
-                        #         continue
+                        if select_choice_has_preset:
+                            select_choice_has_preset = False
+                            continue
 
                         if len(stack_selects) > 0:
                             item_select = stack_selects.pop()
@@ -1769,7 +1851,7 @@ class B_Ui_Map():
                             _build(item_container)
                             continue
 
-                        continue #!
+                        continue
                     
                     skip -= 1
                     
@@ -1785,90 +1867,83 @@ class B_Ui_Map():
                         if ignore:
                             continue
 
-                        _build(B_Ui_Prompt_Single._fromArgs(l_name, **l_args))
+                        _build(B_Ui_Prompt_Single._fromArgs(l_args, l_name))
                     
                     case "DUAL":
                         if ignore:
                             continue
 
-                        _build(B_Ui_Prompt_Dual._fromArgs(l_name, **l_args))
+                        _build(B_Ui_Prompt_Dual._fromArgs(l_args, l_name))
                     
                     case "RANGE":
                         if ignore:
                             continue
                         
-                        _build(B_Ui_Prompt_Range._fromArgs(l_name, **l_args))
+                        _build(B_Ui_Prompt_Range._fromArgs(l_args, l_name))
                     
                     case "RANGE_LINK":
                         if ignore:
                             continue
                         
-                        _build(B_Ui_Prompt_Range_Link._fromArgs(l_name, **l_args))
+                        _build(B_Ui_Prompt_Range_Link._fromArgs(l_args, l_name))
                     
                     case "SELECT":
                         if ignore:
                             skip += 1
                             continue
                         
-                        stack_selects.append(B_Ui_Prompt_Select._fromArgs(l_name, **l_args))
+                        stack_selects.append(B_Ui_Prompt_Select._fromArgs(l_args, l_name))
                     
                     case "CHOICES":
                         if ignore:
                             continue
 
-                        stack_selects[-1].addChoices(**l_args)
+                        stack_selects[-1].addChoices(l_args)
                     
-                    # case "CHOICE":
-                    #     if ignore:
-                    #         continue
-                        
-                    #     _buildDropdownChoice(dropdown_current_choice)
-                        
-                    #     dropdown_current_choice = (l_name, B_UI_Preset_Builder(f"{builder_current_dropdown.name}_{l_name}_PRESET", **{ "is_additive": "1", "hide": "1" }), l_args)
-                    
-                    # case "SET":
-                    #     dropdown_current_choice[1].addMapping(l_name, **l_args)
+                    case "SET":
+                        select_choice_has_preset = True
+                        stack_selects[-1].addChoicePresetMapping(stack_selects[-1].items[-1].name, l_name, l_args)
                     
                     case "GROUP":
                         if ignore:
                             skip += 1
                             continue
 
-                        stack_containers.append(B_Ui_Container_Group._fromArgs(l_name, **l_args))
+                        stack_containers.append(B_Ui_Container_Group._fromArgs(l_args, l_name))
                     
                     case "TAB":
                         if ignore:
                             skip += 1
                             continue
                         
-                        stack_containers.append(B_Ui_Container_Tab._fromArgs(l_name, **l_args))
+                        stack_containers.append(B_Ui_Container_Tab._fromArgs(l_args, l_name))
                     
                     case "ROW":
                         if ignore:
                             skip += 1
                             continue
                         
-                        stack_containers.append(B_Ui_Container_Row._fromArgs(l_name, **l_args))
+                        stack_containers.append(B_Ui_Container_Row._fromArgs(l_args, l_name))
                     
                     case "COLUMN":
                         if ignore:
                             skip += 1
                             continue
                         
-                        stack_containers.append(B_Ui_Container_Column._fromArgs(l_name, **l_args))
+                        stack_containers.append(B_Ui_Container_Column._fromArgs(l_args, l_name))
                     
                     case "ACCORDION":
                         if ignore:
                             skip += 1
                             continue
                         
-                        stack_containers.append(B_Ui_Container_Accordion._fromArgs(l_name, **l_args))
+                        stack_containers.append(B_Ui_Container_Accordion._fromArgs(l_args, l_name))
                     
                     case "SEPARATOR":
                         if ignore:
                             continue
                         
-                        _build(B_Ui_Separator._fromArgs(None, **l_args))
+                        _build(B_Ui_Separator._fromArgs(l_args))
 
                     case _:
                         print(f"WARNING: Invalid layout type -> {l_type}")
@@ -1905,7 +1980,7 @@ class B_Ui_Map():
                 
                 match l_type:
                     case "PRESET":
-                        preset_current = B_Ui_Preset._fromArgs(l_name, **l_args)
+                        preset_current = B_Ui_Preset._fromArgs(l_args, l_name)
                     
                     case "SET":
                         preset_current.addMapping(l_name, l_args)
@@ -1971,12 +2046,13 @@ class B_Ui_Map():
         # - DONE -
         return gr_list
     
+    #! Would be better if the original config file dump function is used somehow:
     def clearConfigFile(self):
         path = os.path.join(b_path_base, b_file_name_config)
         with open(path, "r+", encoding = "utf-8") as file_config:
             config: dict[str, typing.Any] = json.load(file_config)
             
-            config_keys = filter(lambda k: k.find(b_folder_name_script_config) == -1, config.keys()) #!
+            config_keys = filter(lambda k: k.find(b_folder_name_script_config) == -1, config.keys())
 
             config_new: dict[str, typing.Any] = {}
             for k in config_keys:
@@ -1985,129 +2061,6 @@ class B_Ui_Map():
             file_config.seek(0)
             json.dump(config_new, file_config, indent = 4)
             file_config.truncate()
-
-# class B_UI_Preset(B_UI):
-#     @staticmethod
-#     def _fromArgs(name: str, mappings: dict[str, list[typing.Any]], **kwargs: str) -> B_UI:
-#         return B_UI_Preset(
-#             name = name
-#             , mappings = mappings
-#             , isAdditive = bool(int(kwargs.get("is_additive", 0)))
-#             , visible = not bool(int(kwargs.get("hide", 0)))
-#         )
-    
-#     def __init__(self, name: str, mappings: dict[str, list[typing.Any]], isAdditive: bool = False, visible: bool = True):
-#         super().__init__(name, visible, True)
-
-#         self.mappings = mappings
-#         self.isAdditive = isAdditive
-    
-#     def getDefaultName(self) -> str:
-#         return "Preset"
-    
-#     def validate(self, componentMap: dict) -> bool:
-#         valid: bool = super().validate(componentMap)
-
-#         for k in self.mappings:
-#             if k not in componentMap:
-#                 valid = False
-#                 printWarning("Preset", self.name, "Key is not valid")
-#             else:
-#                 bComponent: B_UI_Component = componentMap[k]
-#                 if not bComponent.validateValue(self.mappings[k]):
-#                     valid = False
-#                     printWarning("Preset", f"{self.name}: {bComponent.name}", "Value is not valid")
-
-#         return valid
-    
-#     def finalizeUI(self, componentMap: dict):
-#         super().finalizeUI(componentMap)
-
-#         bComponentMap: dict[str, B_UI_Component] = componentMap
-
-#         bComponents: list[B_UI_Component] = []
-#         if self.isAdditive:
-#             for bComponent in bComponentMap.values():
-#                 if bComponent.name in self.mappings:
-#                     bComponents.append(bComponent)
-#         else:
-#             bComponents += list(bComponentMap.values())
-        
-#         components_inputs: list[typing.Any] = []
-#         components_outputs: list[typing.Any] = []
-#         for bComponent in bComponents:
-#             components_inputs.append(bComponent.ui)
-#             components_outputs += [bComponent.ui] + bComponent.ui_extra_outputs
-        
-#         def _applyPreset(*inputs):
-#             updates: list[typing.Any] = []
-
-#             i = 0
-#             for bComponent in bComponents:
-#                 updates += self.getPresetValue(bComponent, inputs[i])[0]
-#                 i += 1
-            
-#             return updates
-        
-#         self.ui.click(
-#             fn = _applyPreset
-#             , inputs = components_inputs
-#             , outputs = components_outputs
-#         )
-    
-#     def buildSelf(self) -> typing.Any:
-#         return gr.Button(self.name, visible = self.visible)
-    
-#     def getPresetValue(self, bComponent: B_UI_Component, componentValue) -> tuple[list, int]:
-#         """Returns update values and number of inputs consumed"""
-#         presetValue = componentValue
-
-#         if bComponent.name in self.mappings:
-#             presetValue = self.mappings[bComponent.name]
-
-#             if type(bComponent.ui) is not gr.Dropdown or not bComponent.ui.multiselect:
-#                 presetValue = bComponent.defaultValue if len(presetValue) == 0 else presetValue[0]
-#         elif not self.isAdditive:
-#             presetValue = bComponent.defaultValue
-        
-#         return bComponent.getUpdate(presetValue)
-
-# class B_UI_Component_Dropdown_Builder(B_UI_Builder_WithParent):
-#     def __init__(self, name: str, parent: B_UI_Container_Builder, **kwargs: str):
-#         super().__init__(name, parent, **kwargs)
-        
-#         self.choicesList: list[B_Prompt] = []
-    
-#     def addChoice(self, text: str, preset_builder: B_UI_Preset_Builder, **bPromptKwargs: str):
-#         bPrompt: B_Prompt = None
-        
-#         link_type = bPromptKwargs.get("link_type", "")
-#         match link_type:
-#             case "SLIDER":
-#                 bPrompt = B_Prompt_Link_Slider._fromArgs(text, **bPromptKwargs)
-#             case _:
-#                 preset: B_UI_Preset = preset_builder.build()
-#                 bPrompt = B_Prompt_Simple._fromArgs(text, preset, **bPromptKwargs)
-        
-#         if any(map(lambda bPrompt_existing: bPrompt_existing.name == bPrompt.name, self.choicesList)):
-#             print(f"WARNING: Duplicate CHOICE in {self.name} -> {text}")
-        
-#         self.choicesList.append(bPrompt)
-    
-#     def addChoices(self, **choicesKwargs: str):
-#         choicesList: list[B_Prompt] = []
-        
-#         special_type = choicesKwargs["type"]
-#         match special_type:
-#             case "COLOR":
-#                 choicesList = B_UI_Component_Dropdown._buildColorChoicesList(choicesKwargs["postfix"])
-#             case _:
-#                 print(f"Invalid CHOICES type in {self.name} -> {special_type}")
-        
-#         self.choicesList += choicesList
-    
-#     def buildExtended(self) -> B_UI:
-#         return B_UI_Component_Dropdown._fromArgs(self.name, self.choicesList, **self.args)
 
 class Script(scripts.Script):
     bUiMap = B_Ui_Map()

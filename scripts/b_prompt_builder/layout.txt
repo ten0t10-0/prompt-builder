@@ -20,11 +20,11 @@ GROUP All --build_reset_button 1 --build_random_button 1
 
 		SELECT Some Dropdown With Preset Choice --multi_select 1
 			DUAL ChoiceA --vp promptA
-			#DUAL ChoiceB --vp promptB
-				#SET Positive prompt --v somePositivePrompt
-				#SET Some Color Multi-select Dropdown --v Black, White
-				#SET SomethingA - SomethingB --v 15
-			#END
+			DUAL ChoiceB --vp promptB
+				SET Positive prompt --v somePositivePrompt
+				SET Some Color Multi-select Dropdown --v Black, White
+				SET SomethingA - SomethingB --v 15
+			END
 		END
 		
 		#SELECT Some Dropdown With Prefix and Postfix --prefix somePrefix --postfix somePostfix
