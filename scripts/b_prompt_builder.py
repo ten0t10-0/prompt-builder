@@ -1581,9 +1581,8 @@ class B_Ui_Prompt_Range_Link(B_Ui):
             , prompt_b: str
             , hidden: bool = False
         ) -> None:
-        super().__init__(f"{name} {{LINK: {name_link}}}", hidden)
+        super().__init__(name, hidden)
 
-        self.name_original = name
         self.name_link = name_link
         self.prompt_a = prompt_a
         self.prompt_b = prompt_b
@@ -1591,24 +1590,24 @@ class B_Ui_Prompt_Range_Link(B_Ui):
         self.ui: Gr_Markdown = None
     
     def init(self, gr_outputs: list[Gr_Output], gr_outputs_extras: list[Gr_Output], bMap: dict[str, B_Ui]) -> None:
-        self.ui = Gr_Markdown(f"**{self.name_original}**")
+        self.ui = Gr_Markdown(f"**{self.name}**")
     
     def validate(self, bMap: dict[str, B_Ui]) -> bool:
         valid = super().validate(bMap)
 
         if self.name_link is None or len(self.name_link) == 0:
-            printWarning(self.__class__.__name__, self.name_original, f"Invalid link name -> {self.name_link}")
+            printWarning(self.__class__.__name__, self.name, f"Invalid link name -> {self.name_link}")
             return False
 
         b_link = bMap.get(self.name_link, None)
 
         if b_link is None:
-            printWarning(self.__class__.__name__, self.name_original, f"No component found with linked name -> '{self.name_link}'")
+            printWarning(self.__class__.__name__, self.name, f"No component found with linked name -> '{self.name_link}'")
             return False
         
         if type(b_link) is not B_Ui_Prompt_Range:
             valid = False
-            printWarning(self.__class__.__name__, self.name_original, f"Linked component type is invalid -> {b_link.__class__.__name__}")
+            printWarning(self.__class__.__name__, self.name, f"Linked component type is invalid -> {b_link.__class__.__name__}")
         
         return valid
     
