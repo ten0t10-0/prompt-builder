@@ -21,8 +21,24 @@ b_validate_skip = False
 b_prompt_strength_min: float = 0
 b_prompt_strength_step: float = 0.1
 
-def printWarning(component: str, name: str, message: str):
+#: PRINT fn
+def printWarning(component: str, name: str, message: str) -> None:
     print(f"VALIDATE/{component}/{name} -> {message}")
+
+#: PROMPT fn
+def promptSanitized(prompt: str):
+    return prompt.strip() if prompt is not None else ""
+
+def promptDecorated(prompt: str, prefix: str = "", postfix: str = "") -> str:
+    prefix = promptSanitized(prefix)
+    postfix = promptSanitized(postfix)
+    
+    if len(prefix) > 0:
+        prompt = f"{prefix} {prompt}"
+    if len(postfix) > 0:
+        prompt = f"{prompt} {postfix}"
+    
+    return prompt
 
 def promptAdded(promptExisting: str, promptToAdd: str) -> str:
     if len(promptToAdd) > 0:
@@ -33,9 +49,7 @@ def promptAdded(promptExisting: str, promptToAdd: str) -> str:
     
     return promptExisting
 
-def promptSanitized(prompt: str):
-    return prompt.strip() if prompt is not None else ""
-
+#: Gradio Wrappers
 class Gr_Wrapper(ABC):
     def __init__(self, name: str, is_labeled: bool) -> None:
         self.name = name
@@ -333,6 +347,7 @@ class Gr_Accordion(Gr_Container):
     def buildGrContainer(self, visible: bool) -> typing.Any:
         return gr.Accordion(self.name, visible = visible)
 
+#: UI Wrappers
 class B_Ui(ABC):
     @staticmethod
     @abstractmethod
@@ -950,16 +965,11 @@ class B_Ui_Prompt_Single(B_Ui):
         strength = float(self.ui_strength.value)
 
         prompt = promptSanitized(prompt)
-        prefix = promptSanitized(self.prefix)
-        postfix = promptSanitized(self.postfix)
 
         if len(prompt) == 0:
             return
         
-        if len(prefix) > 0:
-            prompt = f"{prefix} {prompt}"
-        if len(postfix) > 0:
-            prompt = f"{prompt} {postfix}"
+        prompt = promptDecorated(prompt, self.prefix, self.postfix)
         
         if strength > 0 and strength != 1:
             prompt = f"({prompt}:{strength})"
@@ -1731,6 +1741,7 @@ class B_Ui_Preset(B_Ui):
         
         self.mappings_temp[name] = args
 
+#: Main UI Wrapper
 class B_Ui_Map():
     @staticmethod
     def readLine(l: str) -> tuple[str, str, dict[str, str]]:
@@ -2062,6 +2073,7 @@ class B_Ui_Map():
             json.dump(config_new, file_config, indent = 4)
             file_config.truncate()
 
+#: Webui script
 class Script(scripts.Script):
     bUiMap = B_Ui_Map()
     
