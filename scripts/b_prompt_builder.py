@@ -216,11 +216,32 @@ class Gr_Slider(Gr_Input):
         )
 
 class Gr_Dropdown(Gr_Input):
+    @staticmethod
+    def valueSanitized(choices: str | list[str] | None, multiselect: bool, allow_none: bool = False) -> str | list[str] | None:
+        if choices is not None:
+            if type(choices) is list:
+                if not multiselect:
+                    if len(choices) > 0:
+                        choices = choices[0]
+                    else:
+                        choices = None
+            elif multiselect:
+                choices = [choices]
+        elif not allow_none:
+            choices = []
+
+        return choices
+    
     def __init__(self, label: str = "Dropdown", choices: list[str] = None, value_default: str | list[str] = None, multiselect: bool = False) -> None:
+        value_default = self.valueSanitized(value_default, multiselect, True)
+
         super().__init__(label, value_default)
 
         self.choices = choices if choices is not None else []
         self.multiselect = multiselect
+    
+    def syncInput(self, value: str | list[str] | None):
+        return super().syncInput(self.valueSanitized(value, self.multiselect, not self.multiselect))
     
     def validateValue(self, value: typing.Any, value_name: str = "Choice(s)") -> tuple[bool, str]:
         if value is not None and type(value) is not str and type(value) is not list:
@@ -307,16 +328,18 @@ class Gr_Row(Gr_Container):
         )
 
 class Gr_Column(Gr_Container):
-    def __init__(self, scale: int = 1, variant: str = "default", visible: bool = True, name: str = "Column") -> None:
+    def __init__(self, scale: int = 1, variant: str = "default", min_width: int = 320, visible: bool = True, name: str = "Column") -> None:
         super().__init__(name, visible)
 
         self.scale = scale
         self.variant = variant
+        self.min_width = min_width
     
     def buildGrContainer(self, visible: bool) -> typing.Any:
         return gr.Column(
             scale = self.scale
             , variant = self.variant
+            , min_width = self.min_width
             , visible = visible
         )
 
@@ -382,7 +405,7 @@ class B_Ui(ABC):
         with self.gr_container.gr:
             self.buildUI()
     
-    def getInput(self, include_unbuilt: bool = False) -> list[Gr_Input]:
+    def getInput(self, include_unbuilt: bool = False, base_only: bool = False) -> list[Gr_Input]:
         gr_list: list[Gr_Input] = []
         
         for gr_output in self.gr_outputs:
@@ -391,7 +414,7 @@ class B_Ui(ABC):
 
         return gr_list
     
-    def getOutput(self, labeled_only: bool = False, exclude_labeled_outputs: bool = False) -> list[Gr_Output]:
+    def getOutput(self, labeled_only: bool = False, exclude_labeled_outputs: bool = False, base_only: bool = False) -> list[Gr_Output]:
         gr_list: list[Gr_Output] = []
 
         for gr_output in self.gr_outputs + self.gr_outputs_extras:
@@ -408,7 +431,7 @@ class B_Ui(ABC):
         
         return gr_list
     
-    def getOutputUpdates(self, updates: list, reset: bool, *inputValues) -> int:
+    def getOutputUpdates(self, updates: list, reset: bool, base_only: bool, *inputValues) -> int:
         """VIRTUAL: Base -> Populates updates with own Gr_Input updates, returns number of values consumed"""
         offset: int = 0
 
@@ -423,6 +446,10 @@ class B_Ui(ABC):
     def getOutputUpdatesExtra(self, updates: list, gr_outputs_extras: list[Gr_Output]) -> None:
         """VIRTUAL: Base -> Nothing"""
         pass
+
+    def getOutputUpdatesFromArgs(self, updates: list, reset: bool, *args) -> int:
+        """VIRTUAL: Base -> getOutputUpdates (base only)"""
+        return self.getOutputUpdates(updates, reset, True)
     
     def initContainer(self, visible: bool) -> Gr_Container:
         """VIRTUAL: Base -> Gr_Group"""
@@ -462,10 +489,6 @@ class B_Ui(ABC):
     def validateArgs(self, *args) -> list[tuple[bool, str]]:
         """VIRTUAL: Base -> []"""
         return []
-
-    def updateFromArgs(self, *args) -> None:
-        """VIRTUAL: Base -> Nothing"""
-        pass
     
     @abstractmethod
     def init(self, gr_outputs: list[Gr_Output], gr_outputs_extras: list[Gr_Output], bMap: dict) -> None:
@@ -510,7 +533,7 @@ class B_Ui_Separator(B_Ui):
     
     def init(self, gr_outputs: list[Gr_Output], gr_outputs_extras: list[Gr_Output], bMap: dict[str, B_Ui]) -> None:
         self.ui = Gr_Markdown(self._html_separator, self.name)
-        gr_outputs_extras.append(self.ui) #!
+        #gr_outputs_extras.append(self.ui) #!
     
     def buildUI(self) -> None:
         self.ui.initGr()
@@ -530,8 +553,6 @@ class B_Ui_Collection(B_Ui, ABC):
 
         self.items = items if items is not None else []
         self.items_sort = items_sort
-
-        self.ui_container_contents: Gr_Container = None
     
     def validate(self, bMap: dict[str, B_Ui]) -> bool:
         valid = super().validate(bMap)
@@ -554,39 +575,37 @@ class B_Ui_Collection(B_Ui, ABC):
         
         return offset
     
-    def getInput(self, include_unbuilt: bool = False) -> list[Gr_Input]:
-        gr_inputs = super().getInput(include_unbuilt)
+    def getInput(self, include_unbuilt: bool = False, base_only: bool = False) -> list[Gr_Input]:
+        gr_inputs = super().getInput(include_unbuilt, base_only)
 
-        for x in self.items:
-            gr_inputs += x.getInput(include_unbuilt)
+        if not base_only:
+            for x in self.items:
+                gr_inputs += x.getInput(include_unbuilt, False)
         
         return gr_inputs
     
-    def getOutput(self, labeled_only: bool = False, exclude_labeled_outputs: bool = False) -> list[Gr_Output]:
-        gr_outputs = super().getOutput(labeled_only, exclude_labeled_outputs)
+    def getOutput(self, labeled_only: bool = False, exclude_labeled_outputs: bool = False, base_only: bool = False) -> list[Gr_Output]:
+        gr_outputs = super().getOutput(labeled_only, exclude_labeled_outputs, base_only)
 
-        for x in self.items:
-            gr_outputs += x.getOutput(labeled_only, exclude_labeled_outputs)
+        if not base_only:
+            for x in self.items:
+                gr_outputs += x.getOutput(labeled_only, exclude_labeled_outputs, False)
         
         return gr_outputs
     
-    def getOutputUpdates(self, updates: list, reset: bool, *inputValues) -> int:
-        offset = super().getOutputUpdates(updates, reset, *inputValues)
+    def getOutputUpdates(self, updates: list, reset: bool, base_only: bool, *inputValues) -> int:
+        offset = super().getOutputUpdates(updates, reset, base_only, *inputValues)
 
-        for x in self.items:
-            offset += x.getOutputUpdates(updates, reset, *inputValues[offset:])
+        if not base_only:
+            for x in self.items:
+                offset += x.getOutputUpdates(updates, reset, False, *inputValues[offset:])
         
         return offset
     
     def buildUI(self) -> None:
-        self.buildGrContents_Top()
-
-        self.ui_container_contents.initGr()
-        with self.ui_container_contents.gr:
-            for x in self.items:
-                self.initItemUI(x)
-        
-        self.buildGrContents_Bottom()
+        """VIRTUAL: Build items' Gradio elements"""
+        for x in self.items:
+            self.initItemUI(x)
     
     def handlePrompt(self, p: StableDiffusionProcessing, bMap: dict[str, B_Ui]) -> None:
         for x in self.items:
@@ -596,26 +615,13 @@ class B_Ui_Collection(B_Ui, ABC):
         self.items.append(item)
     
     def init(self, gr_outputs: list[Gr_Output], gr_outputs_extras: list[Gr_Output], bMap: dict[str, B_Ui]) -> None:
-        """VIRTUAL: Base -> init contents container + children and sorts children (if items_sort)"""
-        self.ui_container_contents = self.initContainerContents(f"{self.name} (Contents)")
-        
+        """VIRTUAL: Base -> init children and sorts children (if items_sort)"""
         for x in self.items:
             x.init_main(bMap)
         
+        #! move to select only
         if self.items_sort:
             self.items = sorted(self.items, key = lambda x: x.name)
-    
-    def initContainerContents(self, name: str) -> Gr_Container:
-        """VIRTUAL: Base -> Gr_Group"""
-        return Gr_Group(name = name)
-    
-    def buildGrContents_Top(self) -> None:
-        """VIRTUAL: Build Gradio elements at top of container, Base -> nothing"""
-        pass
-
-    def buildGrContents_Bottom(self) -> None:
-        """VIRTUAL: Build Gradio elements at bottom of container, Base -> nothing"""
-        pass
 
     def initItemUI(self, item: B_Ui) -> None:
         """Virtual: Base -> item.initUI"""
@@ -646,6 +652,22 @@ class B_Ui_Container(B_Ui_Collection, ABC):
         self.ui_random = Gr_Button(f"Randomize {self.name}")
         gr_outputs_extras.append(self.ui_random)
     
+    def buildUI(self) -> None:
+        super().buildUI()
+
+        if self.ui_reset_build or self.ui_random_build:
+            B_Ui_Separator._build()
+            if self.ui_reset_build and self.ui_random_build:
+                with gr.Row():
+                    with gr.Column():
+                        self.ui_random.initGr()
+                    with gr.Column():
+                        self.ui_reset.initGr()
+            elif self.ui_random_build:
+                self.ui_random.initGr()
+            elif self.ui_reset_build:
+                self.ui_reset.initGr()
+    
     def finalizeUI(self, bMap: dict[str, B_Ui]) -> None:
         super().finalizeUI(bMap)
 
@@ -655,25 +677,13 @@ class B_Ui_Container(B_Ui_Collection, ABC):
         if self.ui_reset_build:
             def _fnReset():
                 updates: list = []
-                self.getOutputUpdates(updates, True)
+                self.getOutputUpdates(updates, True, False)
                 return updates
             
             self.ui_reset.gr.click(
                 fn = _fnReset
                 , outputs = list(map(lambda gr_output: gr_output.gr, self.getOutput(exclude_labeled_outputs = True)))
             )
-    
-    def buildGrContents_Bottom(self) -> None:
-        if self.ui_reset_build and self.ui_random_build:
-            with gr.Row():
-                with gr.Column():
-                    self.ui_random.initGr()
-                with gr.Column():
-                    self.ui_reset.initGr()
-        elif self.ui_random_build:
-            self.ui_random.initGr()
-        elif self.ui_reset_build:
-            self.ui_reset.initGr()
 
 class B_Ui_Container_Tab(B_Ui_Container):
     @staticmethod
@@ -722,7 +732,8 @@ class B_Ui_Container_Row(B_Ui_Container):
     def _fromArgs(args: dict[str, str], name: str = None):
         reset_ui_build, random_ui_build, hidden = B_Ui_Container_Row._paramsFromArgs(args)
         return B_Ui_Container_Row(
-            reset_ui_build = reset_ui_build
+            name = name
+            , reset_ui_build = reset_ui_build
             , random_ui_build = random_ui_build
             , hidden = hidden
         )
@@ -757,7 +768,8 @@ class B_Ui_Container_Column(B_Ui_Container):
     def _fromArgs(args: dict[str, str], name: str = None):
         scale, reset_ui_build, random_ui_build, hidden = B_Ui_Container_Column._paramsFromArgs(args)
         return B_Ui_Container_Column(
-            scale = scale
+            name = name
+            , scale = scale
             , reset_ui_build = reset_ui_build
             , random_ui_build = random_ui_build
             , hidden = hidden
@@ -795,7 +807,8 @@ class B_Ui_Container_Group(B_Ui_Container):
     def _fromArgs(args: dict[str, str], name: str = None):
         reset_ui_build, random_ui_build, hidden = B_Ui_Container_Group._paramsFromArgs(args)
         return B_Ui_Container_Group(
-            reset_ui_build = reset_ui_build
+            name = name
+            , reset_ui_build = reset_ui_build
             , random_ui_build = random_ui_build
             , hidden = hidden
         )
@@ -829,7 +842,8 @@ class B_Ui_Container_Accordion(B_Ui_Container):
     def _fromArgs(args: dict[str, str], name: str = None):
         reset_ui_build, random_ui_build, hidden = B_Ui_Container_Accordion._paramsFromArgs(args)
         return B_Ui_Container_Accordion(
-            reset_ui_build = reset_ui_build
+            name = name
+            , reset_ui_build = reset_ui_build
             , random_ui_build = random_ui_build
             , hidden = hidden
         )
@@ -934,30 +948,38 @@ class B_Ui_Prompt_Single(B_Ui):
             , self.ui_negative.validateValue(negative)
         ]
     
-    def updateFromArgs(
+    def getOutputUpdatesFromArgs(
             self
+            , updates: list
+            , reset: bool
             , prefix: str
             , postfix: str
             , prompt: str
             , strength: float
             , negative: bool
             , hidden: bool
-        ) -> None:
-        self.ui_prompt.syncInput(prompt)
-        self.ui_strength.syncInput(strength)
-        self.ui_negative.syncInput(negative)
+            , *args
+        ) -> int:
+        if self.ui_prompt.isGrBuilt():
+            self.ui_prompt.syncInput(prompt)
+        if self.ui_strength.isGrBuilt():
+            self.ui_strength.syncInput(strength)
+        if self.ui_negative.isGrBuilt():
+            self.ui_negative.syncInput(negative)
+        
+        return super().getOutputUpdatesFromArgs(updates, reset)
     
     def buildUI(self) -> None:
-        if self.ui_prompt_build:
-            self.ui_prompt.initGr()
-        
-        if self.ui_strength_build or self.ui_negative_build:
+        if self.ui_prompt_build or self.ui_strength_build:
             with gr.Row():
+                if self.ui_prompt_build:
+                    self.ui_prompt.initGr()
+                
                 if self.ui_strength_build:
                     self.ui_strength.initGr()
-
-                if self.ui_negative_build:
-                    self.ui_negative.initGr()
+        
+        if self.ui_negative_build:
+            self.ui_negative.initGr()
     
     def handlePrompt(self, p: StableDiffusionProcessing, bMap: dict[str, B_Ui]) -> None:
         prompt = str(self.ui_prompt.value)
@@ -1049,22 +1071,28 @@ class B_Ui_Prompt_Dual(B_Ui):
             , self.ui_strength.validateValue(strength)
         ]
     
-    def updateFromArgs(
+    def getOutputUpdatesFromArgs(
             self
+            , updates: list
+            , reset: bool
             , prompt_positive: str
             , prompt_negative: str
             , strength: float
             , hidden: bool
-        ) -> None:
-        self.ui_prompt_positive.syncInput(prompt_positive)
-        self.ui_prompt_negative.syncInput(prompt_negative)
-        self.ui_strength.syncInput(strength)
+        ) -> int:
+        if self.ui_prompt_positive.isGrBuilt():
+            self.ui_prompt_positive.syncInput(prompt_positive)
+        if self.ui_prompt_negative.isGrBuilt():
+            self.ui_prompt_negative.syncInput(prompt_negative)
+        if self.ui_strength.isGrBuilt():
+            self.ui_strength.syncInput(strength)
+        
+        return super().getOutputUpdatesFromArgs(updates, reset)
     
     def buildUI(self) -> None:
         if self.ui_prompts_build:
-            with gr.Row():
-                self.ui_prompt_positive.initGr()
-                self.ui_prompt_negative.initGr()
+            self.ui_prompt_positive.initGr()
+            self.ui_prompt_negative.initGr()
         
         if self.ui_strength_build:
             self.ui_strength.initGr()
@@ -1097,7 +1125,7 @@ class B_Ui_Prompt_Range(B_Ui):
         prompt_b = args.get("b", "")
         required = bool(int(args.get("is_required", 0)))
         negative = bool(int(args.get("n", 0)))
-        value = int(args.get("v", None))
+        value = int(args.get("v", 0)) #!
         ui_buttons_build = bool(int(args.get("build_buttons", 1)))
         prompt_a_button_text = args.get("a_button", None)
         prompt_b_button_text = args.get("b_button", None)
@@ -1189,8 +1217,10 @@ class B_Ui_Prompt_Range(B_Ui):
             , self.ui_negative.validateValue(negative)
         ]
     
-    def updateFromArgs(
+    def getOutputUpdatesFromArgs(
             self
+            , updates: list
+            , reset: bool
             , prompt_a: str
             , prompt_b: str
             , required: bool
@@ -1200,9 +1230,13 @@ class B_Ui_Prompt_Range(B_Ui):
             , prompt_a_button_text: str
             , prompt_b_button_text: str
             , hidden: bool
-        ) -> None:
-        self.ui_range.syncInput(value)
-        self.ui_negative.syncInput(negative)
+        ) -> int:
+        if self.ui_range.isGrBuilt():
+            self.ui_range.syncInput(value)
+        if self.ui_negative.isGrBuilt():
+            self.ui_negative.syncInput(negative)
+        
+        return super().getOutputUpdatesFromArgs(updates, reset)
     
     def buildUI(self) -> None:
         self.ui_range.initGr()
@@ -1257,12 +1291,17 @@ class B_Ui_Prompt_Range(B_Ui):
 class B_Ui_Prompt_Select(B_Ui_Collection):
     _choice_empty: str = "-"
     _random_choices_max: int = 5
+    _choice_ui_min_width: int = 160
 
     @staticmethod
     def _paramsFromArgs(args: dict[str, str]) -> tuple[bool, str | list[str], bool, bool, bool, int, str, str, bool]:
         choices_default = args.get("v", None)
-        if choices_default is not None and len(choices_default) > 0:
-            choices_default = list(map(lambda v: v.strip(), choices_default.split(","))) #! str | list[str]?
+        if choices_default is not None:
+            choices_default = choices_default.strip()
+            if len(choices_default) > 0:
+                choices_default = list(map(lambda v: v.strip(), choices_default.split(",")))
+            else:
+                choices_default = None
         
         choices_sort = bool(int(args.get("sort", 1)))
         multiselect = bool(int(args.get("multi_select", 0)))
@@ -1300,7 +1339,7 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
     def _buildColorChoicesList(postfix: str = "") -> list[B_Ui_Prompt_Single]:
         return list(map(
             lambda text: B_Ui_Prompt_Single(
-                name = text
+                name = f"{text} {postfix}"
                 , prompt_ui_build = False
                 , postfix = postfix
                 , prompt = text.lower())
@@ -1336,7 +1375,7 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
             , choices_default: str | list[str] = None
             , multiselect: bool = False
             , custom: bool = False #!
-            , simple: bool = False #!
+            , simple: bool = False
             , scale: int = 1 #!
             , prefix: str = None
             , postfix: str = None
@@ -1348,12 +1387,15 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
         self.multiselect = multiselect
         self.prefix = prefix
         self.postfix = postfix
+        self.simple = simple
+        self.scale = scale
 
         self.choicesMap: dict[str, B_Ui] = {}
         self.choicesContainerMap: dict[str, Gr_Column] = {}
         self.choicesPresetMap: dict[str, B_Ui_Preset] = {}
 
         self.ui_dropdown: Gr_Dropdown = None
+        self.ui_container_contents: Gr_Row = None
     
     def init(self, gr_outputs: list[Gr_Output], gr_outputs_extras: list[Gr_Output], bMap: dict[str, B_Ui]) -> None:
         super().init(gr_outputs, gr_outputs_extras, bMap)
@@ -1370,8 +1412,20 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
             self.choicesMap[x.name] = x
             
             if type(x) is B_Ui_Prompt_Single:
-                x.prefix = self.prefix
-                x.postfix = self.postfix
+                if self.prefix is not None:
+                    x.prefix = self.prefix
+                if self.postfix is not None:
+                    x.postfix = self.postfix
+                
+                x.ui_prompt_build = False
+                x.ui_negative_build = not self.simple
+                x.ui_strength_build = not self.simple
+            elif type(x) is B_Ui_Prompt_Dual:
+                x.ui_prompts_build = False
+                x.ui_strength_build = not self.simple
+            elif type(x) is B_Ui_Prompt_Range:
+                x.ui_buttons_build = False
+                x.ui_negative_build = False
 
         # INIT choicesPresetMap
         for preset in self.choicesPresetMap.values():
@@ -1380,12 +1434,21 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
         self.ui_dropdown = Gr_Dropdown(self.name, choices_list, self.choices_default, self.multiselect)
         gr_outputs.append(self.ui_dropdown)
 
-        self.ui_container_contents.visible = self.getShowContainer()
+        self.ui_container_contents = Gr_Row("panel", self.getShowContainer(), f"{self.name} (Contents)")
         gr_outputs_extras.append(self.ui_container_contents)
         for x in self.items:
-            x_container = Gr_Column(1, "panel", self.getShowChoiceContainer(x), f"{self.name}_{x.name} (Container)")
-            self.choicesContainerMap[x.name] = x_container
+            x_container = Gr_Column(1, "panel", self._choice_ui_min_width, self.getShowChoiceContainer(x), f"{self.name}_{x.name} (Container)")
             gr_outputs_extras.append(x_container)
+            self.choicesContainerMap[x.name] = x_container
+    
+    def validate(self, bMap: dict[str, B_Ui]) -> bool:
+        valid = super().validate(bMap)
+
+        for preset in self.choicesPresetMap.values():
+            if not preset.validate(bMap):
+                valid = False
+        
+        return valid
     
     def validateArgs(
             self
@@ -1403,8 +1466,10 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
             self.ui_dropdown.validateValue(choices_selected)
         ]
     
-    def updateFromArgs(
+    def getOutputUpdatesFromArgs(
             self
+            , updates: list
+            , reset: bool
             , choices_sort: bool
             , choices_selected: str | list[str]
             , multiselect: bool
@@ -1414,22 +1479,42 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
             , prefix: str
             , postfix: str
             , hidden: bool
-        ) -> None:
-        self.ui_dropdown.syncInput(choices_selected)
+        ) -> int:
+        if self.ui_dropdown.isGrBuilt():
+            self.ui_dropdown.syncInput(choices_selected)
+        
+        return super().getOutputUpdatesFromArgs(updates, reset)
+    
+    def initContainer(self, visible: bool) -> Gr_Container:
+        return Gr_Column(self.scale, visible = visible, name = f"{self.name} (Container)")
+    
+    def buildUI(self) -> None:
+        self.ui_dropdown.initGr()
+
+        self.ui_container_contents.initGr()
+        with self.ui_container_contents.gr:
+            super().buildUI()
+    
+    def initItemUI(self, item: B_Ui) -> None:
+        item_container = self.choicesContainerMap[item.name]
+        item_container.initGr()
+        with item_container.gr:
+            super().initItemUI(item)
     
     def finalizeUI(self, bMap: dict[str, B_Ui]) -> None:
         super().finalizeUI(bMap)
 
-        #! Show/Hide selected - find better way to exclude "source" element from event's output?
-        def _fnShowHide(*inputValues):
+        # Show/Hide selected
+        def _fnShowHide(choices) -> list:
             updates: list = []
-            self.getOutputUpdates(updates, False, *inputValues)
+            self.ui_dropdown.syncInput(choices)
+            self.getOutputUpdatesExtra(updates, self.gr_outputs_extras)
             return updates
         
         self.ui_dropdown.gr.input(
-            fn = lambda *inputValues: _fnShowHide(*inputValues)[1:]
-            , inputs = list(map(lambda gr_input: gr_input.gr, self.getInput()))
-            , outputs = list(map(lambda gr_output: gr_output.gr, self.getOutput(exclude_labeled_outputs = True)))[1:]
+            fn = lambda choices: _fnShowHide(choices)
+            , inputs = self.ui_dropdown.gr
+            , outputs = [self.ui_container_contents.gr] + list(map(lambda c: c.gr, self.choicesContainerMap.values()))
         )
 
         #! Presets - potentially repeating logic from B_Ui_Preset, encapsulate some of this?
@@ -1444,9 +1529,9 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
             inputs: list = []
             outputs: list = []
             for b in bList:
-                for gr_input in b.getInput():
+                for gr_input in b.getInput(base_only = True):
                     inputs.append(gr_input.gr)
-                for gr_output in b.getOutput(exclude_labeled_outputs = True):
+                for gr_output in b.getOutput(exclude_labeled_outputs = True, base_only = True):
                     outputs.append(gr_output.gr)
             
             def _apply(choices: str | list[str], *inputValues):
@@ -1471,10 +1556,9 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
                             break #! if 2 choices affect same element, first one prioritized
                     
                     if preset_mapping is not None:
-                        b.updateFromArgs(*preset_mapping)
-                        offset += b.getOutputUpdates(updates, False)
+                        offset += b.getOutputUpdatesFromArgs(updates, False, *preset_mapping)
                     else:
-                        offset += b.getOutputUpdates(updates, False, *inputValues[offset:])
+                        offset += b.getOutputUpdates(updates, False, True, *inputValues[offset:])
                 
                 return updates
             
@@ -1483,18 +1567,6 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
                 , inputs = [self.ui_dropdown.gr] + inputs
                 , outputs = outputs
             )
-    
-    def initContainerContents(self, name: str) -> Gr_Container:
-        return Gr_Row("panel", name = name)
-    
-    def buildGrContents_Top(self) -> None:
-        self.ui_dropdown.initGr()
-    
-    def initItemUI(self, item: B_Ui) -> None:
-        item_container = self.choicesContainerMap[item.name]
-        item_container.initGr()
-        with item_container.gr:
-            super().initItemUI(item)
     
     def getOutputUpdatesExtra(self, updates: list, gr_outputs_extras: list[Gr_Output]) -> None:
         self.ui_container_contents.getUpdateVisible(updates, self.getShowContainer())
@@ -1541,10 +1613,16 @@ class B_Ui_Prompt_Select(B_Ui_Collection):
         self.items += choicesList
     
     def getShowContainer(self) -> bool:
+        if self.simple:
+            return False
+        
         choice_current = self.ui_dropdown.value
         return choice_current is not None and len(choice_current) > 0 and choice_current != self._choice_empty
     
     def getShowChoiceContainer(self, x: B_Ui) -> bool:
+        if self.simple:
+            return False
+        
         choice_current = self.ui_dropdown.value
         choice = x.name
         return choice_current is not None and (choice == choice_current or choice in choice_current)
@@ -1718,9 +1796,9 @@ class B_Ui_Preset(B_Ui):
             bList = list(bMap.values())
         
         for b in bList:
-            for gr_input in b.getInput():
+            for gr_input in b.getInput(base_only = True):
                 inputs.append(gr_input.gr)
-            for gr_output in b.getOutput(exclude_labeled_outputs = True):
+            for gr_output in b.getOutput(exclude_labeled_outputs = True, base_only = True):
                 outputs.append(gr_output.gr)
         
         def _apply(*inputValues) -> list:
@@ -1729,10 +1807,11 @@ class B_Ui_Preset(B_Ui):
 
             for x in bList:
                 if x.name in self.mappings:
-                    x.updateFromArgs(*self.mappings[x.name])
-                    offset += x.getOutputUpdates(updates, False)
+                    offset += x.getOutputUpdatesFromArgs(updates, False, *self.mappings[x.name])
+                elif self.additive:
+                    offset += x.getOutputUpdates(updates, False, True, *inputValues[offset:])
                 else:
-                    offset += x.getOutputUpdates(updates, not self.additive, *inputValues[offset:])
+                    offset += x.getOutputUpdates(updates, True, True)
             
             return updates
 
