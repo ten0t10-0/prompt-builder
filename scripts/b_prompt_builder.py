@@ -18,10 +18,6 @@ b_file_name_presets = "presets.txt"
 b_tagged_ignore = False
 b_validate_skip = False
 
-b_prompt_strength_min: float = 0
-b_prompt_strength_step: float = 0.1
-
-#: PRINT fn
 def printWarning(component: str, name: str, message: str) -> None:
     print(f"VALIDATE/{component}/{name} -> {message}")
 
@@ -36,199 +32,224 @@ class B_Value():
     def reset(self):
         self.value = self.buildDefaultValue()
 
-class B_Value_List(B_Value):
-    def __init__(self, value_default: list):
-        super().__init__(value_default)
-    
-    def buildDefaultValue(self):
-        if self.value_default is not None:
-            return self.value_default[:]
-        return None
-
 class B_Prompt(ABC):
-    _prompt_value_default: str = ""
+    class Values():
+        class Defaults():
+            prompt_value: str = ""
+            strength_value: float = 1
+            negative_value: bool = False
 
-    _prompt_negative_value_default: str = ""
+            strength_min: float = 0
+            strength_step: float = 0.1
 
-    _strength_value_default: float = 1
-    _strength_min: float = 0
-    _strength_step: float = 0.1
+            range_min: int = 0
+            range_max: int = 100
 
-    _negative_value_default: bool = False
+        def __init__(
+                self
+                , prompt_enable: bool = False
+                , negative_enable: bool = False
+                , prompt_negative_enable: bool = False
+                , prompt_range_enable: bool = False
+                , prompt_value: str = Defaults.prompt_value
+                , strength_value: float = Defaults.strength_value
+                , negative_value: bool = Defaults.negative_value
+                , prompt_negative_value: str = Defaults.prompt_value
+                , strength_negative_value: float = Defaults.strength_value
+                , prompt_range_a: str = Defaults.prompt_value
+                , prompt_range_b: str = Defaults.prompt_value
+                , prefix: str = Defaults.prompt_value
+                , postfix: str = Defaults.prompt_value
+            ):
+            self.prompt_enable = prompt_enable
+            self.negative_enable = negative_enable
+            self.prompt_negative_enable = prompt_negative_enable
+            self.prompt_range_enable = prompt_range_enable
 
-    @staticmethod
-    def _promptSanitized(prompt: str):
-        return prompt.strip() if prompt is not None else ""
-    
-    @staticmethod
-    def _promptAdded(promptExisting: str, promptToAdd: str) -> str:
-        if len(promptToAdd) > 0:
-            if len(promptExisting) > 0:
-                promptExisting += ", " + promptToAdd
-            else:
-                promptExisting = promptToAdd
+            self.prompt = B_Value(prompt_value)
+            self.strength = B_Value(strength_value)
+            self.negative = B_Value(negative_value)
+            self.prompt_negative = B_Value(prompt_negative_value)
+            self.strength_negative = B_Value(strength_negative_value)
+            self.prompt_range_a = B_Value(prompt_range_a) #!
+            self.prompt_range_b = B_Value(prompt_range_b) #!
+
+            self.prefix = prefix
+            self.postfix = postfix
         
-        return promptExisting
+        def reset(self):
+            self.prompt.reset()
+            self.strength.reset()
+            self.negative.reset()
+            self.prompt_negative.reset()
+            self.strength_negative.reset()
+            self.prompt_range_a.reset()
+            self.prompt_range_b.reset()
+    
 
-    def __init__(
-            self
-            , name: str
-            , prompt_negative_enable: bool = False
-            , strength_enable: bool = False
-            , negative_enable: bool = False
-            , prompt_value: str = _prompt_value_default
-            , prompt_negative_value: str = _prompt_negative_value_default
-            , strength_value: float = _strength_value_default
-            , negative_value: bool = _negative_value_default
-            , prompt_prefix: str = ""
-            , prompt_postfix: str = ""
-        ):
+    class Fn():
+        @staticmethod
+        def _promptSanitized(prompt: str) -> str:
+            return prompt.strip() if prompt is not None else ""
+        
+        @staticmethod
+        def _promptAdded(promptExisting: str, promptToAdd: str) -> str:
+            if len(promptToAdd) > 0:
+                if len(promptExisting) > 0:
+                    promptExisting += ", " + promptToAdd
+                else:
+                    promptExisting = promptToAdd
+            
+            return promptExisting
+        
+        @staticmethod
+        def _promptDecorated(prompt: str, prefix: str = "", postfix: str = "") -> str:
+            if len(prompt) > 0:
+                if len(prefix) > 0:
+                    prompt = f"{prefix} {prompt}"
+                if len(postfix) > 0:
+                    prompt = f"{prompt} {postfix}"
+            
+            return prompt
+        
+        @staticmethod
+        def _promptStrengthened(prompt: str, strength: float) -> str:
+            if len(prompt) == 0 or strength == B_Prompt.Values.Defaults.strength_min:
+                return ""
+            
+            if strength != 1:
+                prompt = f"({prompt}:{strength})"
+            
+            return prompt
+    
+    def __init__(self, name: str, values: Values):
         self.name = name
-
-        self.prompt_negative_enable = prompt_negative_enable
-        self.strength_enable = strength_enable
-        self.negative_enable = negative_enable
-
-        self.prompt_prefix = prompt_prefix
-        self.prompt_postfix = prompt_postfix
-
-        self.prompt = B_Value(prompt_value)
-        self.prompt_negative = B_Value(prompt_negative_value)
-        self.strength = B_Value(strength_value)
-        self.negative = B_Value(negative_value)
+        self.values = values
     
     def reset(self):
-        self.prompt.reset()
-        self.prompt_negative.reset()
-        self.strength.reset()
-        self.negative.reset()
+        self.values.reset()
     
+    @abstractmethod
     def build(self) -> tuple[str, str]:
-        prompt = self._promptSanitized(self.prompt.value)
-        prompt_negative = self._promptSanitized(self.prompt_negative.value if self.prompt_negative_enable else None)
-        strength = self.strength.value if self.strength_enable else None
-        negative = self.negative.value if self.negative_enable else None
-
-        prompt_prefix = self._promptSanitized(self.prompt_prefix)
-        prompt_postfix = self._promptSanitized(self.prompt_postfix)
-        
-        if len(prompt_prefix) > 0:
-            if len(prompt) > 0:
-                prompt = f"{prompt_prefix} {prompt}"
-            if len(prompt_negative) > 0:
-                prompt_negative = f"{prompt_prefix} {prompt_negative}"
-        if len(prompt_postfix) > 0:
-            if len(prompt) > 0:
-                prompt = f"{prompt} {prompt_postfix}"
-            if len(prompt_negative) > 0:
-                prompt_negative = f"{prompt_negative} {prompt_postfix}"
-        
-        if strength is not None and strength > 0 and strength != 1:
-            if len(prompt) > 0:
-                prompt = f"({prompt}:{strength})"
-            if len(prompt_negative) > 0:
-                prompt_negative = f"({prompt_negative}:{strength})"
-        
-        if negative is not None:
-            if not negative:
-                prompt_negative = ""
-            else:
-                prompt_negative = prompt
-                prompt = ""
-
-        return prompt, prompt_negative
+        pass
 
 class B_Prompt_Single(B_Prompt):
     def __init__(
             self
             , name: str
-            , prompt_value: str = B_Prompt._prompt_value_default
-            , strength_value: float = B_Prompt._strength_value_default
-            , negative_value: bool = B_Prompt._negative_value_default
+            , prompt_value = B_Prompt.Values.Defaults.prompt_value
+            , strength_value = B_Prompt.Values.Defaults.strength_value
+            , negative_value = B_Prompt.Values.Defaults.negative_value
         ):
         super().__init__(
             name
-            , strength_enable = True
-            , negative_enable = True
-            , prompt_value = prompt_value
-            , strength_value = strength_value
-            , negative_value = negative_value
+            , B_Prompt.Values(
+                prompt_enable = True
+                , negative_enable = True
+                , prompt_value = prompt_value
+                , strength_value = strength_value
+                , negative_value = negative_value
+            )
         )
+    
+    def build(self) -> tuple[str, str]:
+        prompt = B_Prompt.Fn._promptStrengthened(
+            B_Prompt.Fn._promptDecorated(
+                B_Prompt.Fn._promptSanitized(self.values.prompt.value)
+                , self.values.prefix
+                , self.values.postfix
+            )
+            , self.values.strength.value
+        )
+        if not self.values.negative.value:
+            return prompt, ""
+        else:
+            return "", prompt
 
 class B_Prompt_Dual(B_Prompt):
     def __init__(
             self
             , name: str
-            , prompt_value: str = B_Prompt._prompt_value_default
-            , prompt_negative_value: str = B_Prompt._prompt_negative_value_default
-            , strength_value: float = B_Prompt._strength_value_default
+            , prompt_value = B_Prompt.Values.Defaults.prompt_value
+            , strength_value = B_Prompt.Values.Defaults.strength_value
+            , prompt_negative_value = B_Prompt.Values.Defaults.prompt_value
+            , strength_negative_value = B_Prompt.Values.Defaults.strength_value
         ):
         super().__init__(
             name
-            , prompt_negative_enable = True
-            , strength_enable = True
-            , prompt_value = prompt_value
-            , prompt_negative_value = prompt_negative_value
-            , strength_value = strength_value
+            , B_Prompt.Values(
+                prompt_enable = True
+                , prompt_negative_enable = True
+                , prompt_value = prompt_value
+                , strength_value = strength_value
+                , prompt_negative_value = prompt_negative_value
+                , strength_negative_value = strength_negative_value
+            )
         )
-
-class B_UI(ABC):
-    _html_separator: str = "<hr style=\"margin: 0.5em 0; border-style: dotted; border-color: var(--border-color-primary);\" />"
     
-    _b_prompts_selected: dict[str, B_Prompt] = {}
+    def build(self) -> tuple[str, str]:
+        prompt = B_Prompt.Fn._promptStrengthened(
+            B_Prompt.Fn._promptDecorated(
+                B_Prompt.Fn._promptSanitized(self.values.prompt.value)
+                , self.values.prefix
+                , self.values.postfix
+            )
+            , self.values.strength.value
+        )
+        prompt_negative = B_Prompt.Fn._promptStrengthened(
+            B_Prompt.Fn._promptDecorated(
+                B_Prompt.Fn._promptSanitized(self.values.prompt_negative.value)
+                , self.values.prefix
+                , self.values.postfix
+            )
+            , self.values.strength_negative.value
+        )
+        return prompt, prompt_negative
 
-    _gr_prompt: typing.Any = None
-    _gr_prompt_negative: typing.Any = None
-    _gr_reset: typing.Any = None
-
-    @staticmethod
-    def _isPromptSelected(b_prompt: B_Prompt) -> bool:
-        return b_prompt is not None and b_prompt.name in B_UI._b_prompts_selected
+class B_Prompt_Map():
+    def __init__(self, b_prompts: list[B_Prompt]):
+        self.map: dict[str, B_Prompt] = {}
+        for b_prompt in b_prompts:
+            self.map[b_prompt.name] = None
     
-    @staticmethod
-    def _getGrPrompt() -> list[typing.Any]:
-        return [B_UI._gr_prompt, B_UI._gr_prompt_negative]
+    def update(self, b_prompt: B_Prompt, remove: bool = False):
+        self.map[b_prompt.name] = b_prompt if not remove else None
     
-    @staticmethod
-    def _getUpdatePrompt() -> list[str]:
+    def isSelected(self, b_prompt: B_Prompt | None):
+        return b_prompt is not None and self.map[b_prompt.name] is not None
+    
+    def buildPromptUpdate(self) -> list[str]:
         prompt: str = ""
         prompt_negative: str = ""
 
-        for b_prompt in B_UI._b_prompts_selected.values():
+        for b_prompt in self.map.values():
+            if b_prompt is None:
+                continue
+            
             b_prompt_positive, b_prompt_negative = b_prompt.build()
-            prompt = B_Prompt._promptAdded(prompt, b_prompt_positive)
-            prompt_negative = B_Prompt._promptAdded(prompt_negative, b_prompt_negative)
+            prompt = B_Prompt.Fn._promptAdded(prompt, b_prompt_positive)
+            prompt_negative = B_Prompt.Fn._promptAdded(prompt_negative, b_prompt_negative)
         
         return [prompt, prompt_negative]
 
+class B_UI(ABC):
     @staticmethod
     def _buildSeparator() -> typing.Any:
-        return gr.Markdown(value = B_UI_Prompt._html_separator)
-    
-    @staticmethod
-    def _build():
-        B_UI._buildSeparator()
-
-        with gr.Column(variant = "panel"):
-            B_UI._gr_prompt = gr.Textbox(
-                label = "Final Prompt"
-            )
-            B_UI._gr_prompt_negative = gr.Textbox(
-                label = "Final Negative Prompt"
-            )
-            B_UI._buildSeparator()
-            B_UI._gr_reset = gr.Button(
-                value = "Reset All"
-            )
+        return gr.Markdown(value = "<hr style=\"margin: 0.5em 0; border-style: dotted; border-color: var(--border-color-primary);\" />")
     
     def __init__(self, name: str):
         self.name = name
     
-    def bind(self):
+    @abstractmethod
+    def getBPrompts(self) -> list[B_Prompt]:
         pass
 
     @abstractmethod
-    def build(self):
+    def build(self, b_prompt_map: B_Prompt_Map) -> None:
+        pass
+
+    @abstractmethod
+    def bind(self, b_prompt_map: B_Prompt_Map, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
         pass
 
     @abstractmethod
@@ -236,46 +257,76 @@ class B_UI(ABC):
         pass
 
 class B_UI_Prompt(B_UI):
-    def __init__(self, name: str = "Prompt"):
+    def __init__(self, name: str = "Prompt", b_prompt: B_Prompt = None, show_name: bool = False):
         super().__init__(name)
 
-        self.b_prompt: B_Prompt = None
+        self.b_prompt = b_prompt
+        self.show_name = show_name
 
         self.gr_container: typing.Any = None
+
+        self.gr_prompt_container: typing.Any = None
         self.gr_prompt: typing.Any = None
-        self.gr_prompt_negative: typing.Any = None
         self.gr_strength: typing.Any = None
+
+        self.gr_prompt_negative_container: typing.Any = None
+        self.gr_prompt_negative: typing.Any = None
+        self.gr_strength_negative: typing.Any = None
+
         self.gr_negative: typing.Any = None
+
         self.gr_button_apply: typing.Any = None
         self.gr_button_remove: typing.Any = None
+    
+    def getBPrompts(self) -> list[B_Prompt]:
+        if self.b_prompt is not None:
+            return [self.b_prompt]
+        else:
+            return []
 
-    def build(self):
-        self.gr_container = gr.Column(variant = "panel", visible = False)
+    def build(self, b_prompt_map: B_Prompt_Map) -> None:
+        #!
+        if self.b_prompt is not None:
+            b_prompt_map.update(self.b_prompt)
+        
+        values, visible, visible_button_remove = self.getUpdateValues(b_prompt_map)
+        
+        self.gr_container = (
+            gr.Column(variant = "panel", visible = visible) if not self.show_name else 
+            gr.Accordion(self.name, open = False, visible = visible)
+        )
         with self.gr_container:
             with gr.Row():
-                self.gr_prompt = gr.Textbox(
-                    label = "Prompt"
-                    , value = B_Prompt._prompt_value_default
-                    , visible = True
-                )
-                self.gr_prompt_negative = gr.Textbox(
-                    label = "Negative Prompt"
-                    , value = B_Prompt._prompt_negative_value_default
-                    , visible = False
-                )
-
-            self.gr_strength = gr.Number(
-                label = "Strength"
-                , value = B_Prompt._strength_value_default
-                , minimum = B_Prompt._strength_min
-                , step = B_Prompt._strength_step
-                , visible = False
-            )
-
+                self.gr_prompt_container = gr.Column(visible = values.prompt_enable)
+                with self.gr_prompt_container:
+                    self.gr_prompt = gr.Textbox(
+                        label = "Prompt"
+                        , value = values.prompt.value
+                    )
+                    self.gr_strength = gr.Number(
+                        label = "Strength"
+                        , value = values.strength.value
+                        , minimum = B_Prompt.Values.Defaults.strength_min
+                        , step = B_Prompt.Values.Defaults.strength_step
+                    )
+                
+                self.gr_prompt_negative_container = gr.Column(visible = values.prompt_negative_enable)
+                with self.gr_prompt_negative_container:
+                    self.gr_prompt_negative = gr.Textbox(
+                        label = "Prompt (N)"
+                        , value = values.prompt_negative.value
+                    )
+                    self.gr_strength_negative = gr.Number(
+                        label = "Strength (N)"
+                        , value = values.strength_negative.value
+                        , minimum = B_Prompt.Values.Defaults.strength_min
+                        , step = B_Prompt.Values.Defaults.strength_step
+                    )
+            
             self.gr_negative = gr.Checkbox(
                 label = "Negative?"
-                , value = B_Prompt._negative_value_default
-                , visible = False
+                , value = values.negative.value
+                , visible = values.negative_enable
             )
 
             B_UI._buildSeparator()
@@ -286,64 +337,78 @@ class B_UI_Prompt(B_UI):
                 )
                 self.gr_button_remove = gr.Button(
                     value = "Remove"
-                    , visible = False
+                    , visible = visible_button_remove
                 )
     
-    def bind(self):
+    def bind(self, b_prompt_map: B_Prompt_Map, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
         # Add/update
-        def _fnApply(prompt: str, prompt_negative: str, strength: float, negative: bool):
-            self.b_prompt.prompt.value = prompt
-            self.b_prompt.prompt_negative.value = prompt_negative
-            self.b_prompt.strength.value = strength
-            self.b_prompt.negative.value = negative
+        def _fnApply(prompt: str, strength: float, negative: bool, prompt_negative: str, strength_negative: float):
+            self.b_prompt.values.prompt.value = prompt
+            self.b_prompt.values.strength.value = strength
+            self.b_prompt.values.negative.value = negative
+            self.b_prompt.values.prompt_negative.value = prompt_negative
+            self.b_prompt.values.strength_negative.value = strength_negative
 
-            self._b_prompts_selected[self.b_prompt.name] = self.b_prompt
-            
-            return [self.gr_button_remove.update(visible = True)] + self._getUpdatePrompt()
+            b_prompt_map.update(self.b_prompt)
+            return [self.gr_button_remove.update(visible = True)] + b_prompt_map.buildPromptUpdate()
         self.gr_button_apply.click(
             fn = _fnApply
-            , inputs = [self.gr_prompt, self.gr_prompt_negative, self.gr_strength, self.gr_negative]
-            , outputs = [self.gr_button_remove] + self._getGrPrompt()
+            , inputs = [self.gr_prompt, self.gr_strength, self.gr_negative, self.gr_prompt_negative, self.gr_strength_negative]
+            , outputs = [self.gr_button_remove, gr_prompt, gr_prompt_negative]
         )
 
         # Remove
         def _fnRemove():
-            if self.b_prompt is not None:
-                del self._b_prompts_selected[self.b_prompt.name]
-            
-            return [self.gr_button_remove.update(visible = False)] + self._getUpdatePrompt()
+            b_prompt_map.update(self.b_prompt, remove = True)
+            return [self.gr_button_remove.update(visible = False)] + b_prompt_map.buildPromptUpdate()
         self.gr_button_remove.click(
             fn = _fnRemove
-            , outputs = [self.gr_button_remove] + self._getGrPrompt()
+            , outputs = [self.gr_button_remove, gr_prompt, gr_prompt_negative]
         )
     
     def getGrForWebUI(self) -> list[typing.Any]:
         return [
             self.gr_prompt
-            , self.gr_prompt_negative
             , self.gr_strength
             , self.gr_negative
+            , self.gr_prompt_negative
+            , self.gr_strength_negative
             , self.gr_button_apply
             , self.gr_button_remove
         ]
     
-    def getUpdateInit(self, b_prompt: B_Prompt) -> list:
+    def getUpdateValues(self, b_prompt_map: B_Prompt_Map) -> tuple[B_Prompt.Values, bool, bool]:
+        values = self.b_prompt.values if self.b_prompt is not None else B_Prompt.Values()
+        visible = self.b_prompt is not None
+        visible_button_remove = b_prompt_map.isSelected(self.b_prompt)
+        return values, visible, visible_button_remove
+    
+    def getUpdateInit(self, b_prompt: B_Prompt, b_prompt_map: B_Prompt_Map) -> list:
         self.b_prompt = b_prompt
+        
+        values, visible, visible_button_remove = self.getUpdateValues(b_prompt_map)
+
         return [
-            self.gr_container.update(visible = b_prompt is not None)
-            , self.b_prompt.prompt.value if b_prompt is not None else B_Prompt._prompt_value_default
-            , self.gr_prompt_negative.update(visible = b_prompt is not None and b_prompt.prompt_negative_enable, value = self.b_prompt.prompt_negative.value if b_prompt is not None else B_Prompt._prompt_negative_value_default)
-            , self.gr_strength.update(visible = b_prompt is not None and b_prompt.strength_enable, step = B_Prompt._strength_step, value = self.b_prompt.strength.value if b_prompt is not None else B_Prompt._strength_value_default)
-            , self.gr_negative.update(visible = b_prompt is not None and b_prompt.negative_enable, value = self.b_prompt.negative.value if b_prompt is not None else B_Prompt._negative_value_default)
-            , self.gr_button_remove.update(visible = self._isPromptSelected(b_prompt))
+            self.gr_container.update(visible = visible)
+            , self.gr_prompt_container.update(visible = values.prompt_enable)
+            , values.prompt.value
+            , values.strength.value
+            , self.gr_prompt_negative_container.update(visible = values.prompt_negative_enable)
+            , values.prompt_negative.value
+            , values.strength_negative.value
+            , self.gr_negative.update(visible = values.negative_enable, value = values.negative.value)
+            , self.gr_button_remove.update(visible = visible_button_remove)
         ]
     
     def getOutputsInit(self) -> list[typing.Any]:
         return [
             self.gr_container
+            , self.gr_prompt_container
             , self.gr_prompt
-            , self.gr_prompt_negative
             , self.gr_strength
+            , self.gr_prompt_negative_container
+            , self.gr_prompt_negative
+            , self.gr_strength_negative
             , self.gr_negative
             , self.gr_button_remove
         ]
@@ -351,43 +416,54 @@ class B_UI_Prompt(B_UI):
 class B_UI_Dropdown(B_UI):
     _choice_empty: str = "-"
 
-    def __init__(self, name: str = "Dropdown", b_prompts: list[B_Prompt] = None, value_default: str = _choice_empty):
+    def __init__(
+            self
+            , name: str = "Dropdown"
+            , b_prompts: list[B_Prompt] = None
+            , choice_default: str = _choice_empty
+        ):
         super().__init__(name)
 
-        self.value_default = value_default
+        self.choice_default = choice_default
 
+        self.choice_map: dict[str, B_Prompt] = {}
+        if b_prompts is not None and len(b_prompts) > 0:
+            for b_prompt in b_prompts:
+                self.choice_map[b_prompt.name] = b_prompt
+        
         self.gr_dropdown: typing.Any = None
         
         self.b_prompt_ui = B_UI_Prompt(f"{self.name} (Prompt)")
-
-        self.b_prompts_map: dict[str, B_Prompt] = {}
-        if b_prompts is not None and len(b_prompts) > 0:
-            for b_prompt in b_prompts:
-                self.b_prompts_map[b_prompt.name] = b_prompt
     
-    def build(self):
+    def getBPrompts(self) -> list[B_Prompt]:
+        return list(self.choice_map.values())
+    
+    def build(self, b_prompt_map: B_Prompt_Map) -> None:
+        # Self
         self.gr_dropdown = gr.Dropdown(
             label = self.name
-            , choices = [self._choice_empty] + list(self.b_prompts_map.keys())
+            , choices = [self._choice_empty] + list(self.choice_map.keys())
             , multiselect = False
-            , value = self.value_default
+            , value = self.choice_default
             , allow_custom_value = False
         )
-        self.b_prompt_ui.build()
+
+        # Prompt UI
+        self.b_prompt_ui.build(b_prompt_map)
     
-    def bind(self):
+    def bind(self, b_prompt_map: B_Prompt_Map, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
         # Self
-        def _onInput(choice: str):
-            b_prompt = self.b_prompts_map.get(choice, None)
-            return self.b_prompt_ui.getUpdateInit(b_prompt)
-        self.gr_dropdown.input(
-            fn = _onInput
+        def _onSelect(choice: str):
+            b_prompt = self.choice_map.get(choice)
+            return self.b_prompt_ui.getUpdateInit(b_prompt, b_prompt_map)
+        self.gr_dropdown.select(
+            fn = _onSelect
             , inputs = self.gr_dropdown
             , outputs = self.b_prompt_ui.getOutputsInit()
         )
 
         # Prompt UI
-        self.b_prompt_ui.bind()
+        self.b_prompt_ui.bind(b_prompt_map, gr_prompt, gr_prompt_negative)
     
     def getGrForWebUI(self) -> list[typing.Any]:
         return [self.gr_dropdown] + self.b_prompt_ui.getGrForWebUI()
@@ -396,19 +472,25 @@ class B_UI_Container(B_UI, ABC):
     def __init__(self, name: str, children: list[B_UI] = None):
         super().__init__(name)
 
-        self.gr_container: typing.Any = None
-
         self.children = children if children is not None else []
+
+        self.gr_container: typing.Any = None
     
-    def build(self):
+    def getBPrompts(self) -> list[B_Prompt]:
+        b_prompt_list: list[B_Prompt] = []
+        for b_ui in self.children:
+            b_prompt_list += b_ui.getBPrompts()
+        return b_prompt_list
+    
+    def build(self, b_prompt_map: B_Prompt_Map) -> None:
         self.gr_container = self.buildContainer()
         with self.gr_container:
             for b_ui in self.children:
-                b_ui.build()
+                b_ui.build(b_prompt_map)
     
-    def bind(self):
+    def bind(self, b_prompt_map: B_Prompt_Map, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
         for b_ui in self.children:
-            b_ui.bind()
+            b_ui.bind(b_prompt_map, gr_prompt, gr_prompt_negative)
     
     def getGrForWebUI(self) -> list[typing.Any]:
         gr_list: list[typing.Any] = []
@@ -427,17 +509,80 @@ class B_UI_Container_Tab(B_UI_Container):
     def buildContainer(self) -> typing.Any:
         return gr.Tab(self.name)
 
-class B_UI_Master(B_UI_Container):
-    def __init__(self, children: list[B_UI] = None):
-        super().__init__("Container (MASTER)", children)
+class B_UI_Master():
+    def __init__(self, layout: list[B_UI]):
+        self.layout = layout
+        self.b_prompt_map = self.buildBPromptMap(layout)
+
+        self.gr_prompt: typing.Any = None
+        self.gr_prompt_negative: typing.Any = None
+        self.gr_apply: typing.Any = None
+        self.gr_reset: typing.Any = None
+        self.gr_clear_config: typing.Any
     
-    def build(self):
+    def buildBPromptMap(self, layout: list[B_UI]):
+        b_prompts: list[B_Prompt] = []
+        for b_ui in layout:
+            b_prompts += b_ui.getBPrompts()
+        return B_Prompt_Map(b_prompts)
+    
+    def build(self) -> list[typing.Any]:
+        """Builds layout and returns Gradio elements for WebUI"""
+        # LAYOUT
         B_UI._buildSeparator()
-        super().build()
-        self._build() #!
+        for b_ui in self.layout:
+            b_ui.build(self.b_prompt_map)
+        
+        # MAIN
+        prompt = self.b_prompt_map.buildPromptUpdate()
+        B_UI._buildSeparator()
+        self.gr_prompt = gr.Textbox(label = "Final Prompt", value = prompt[0])
+        self.gr_prompt_negative = gr.Textbox(label = "Final Negative Prompt", value = prompt[1])
+        B_UI._buildSeparator()
+        with gr.Row():
+            self.gr_apply = gr.Button("Apply All")
+            self.gr_reset = gr.Button("Reset All")
+
+        # EXTRAS
+        B_UI._buildSeparator()
+        with gr.Accordion("Settings", open = False):
+            self.gr_clear_config = gr.Button("Clear config")
+        
+        # Bind
+        for b_ui in self.layout:
+            b_ui.bind(self.b_prompt_map, self.gr_prompt, self.gr_prompt_negative)
+        
+        self.gr_clear_config.click(fn = self.clearConfigFile)
+        
+        # Return
+        gr_list: list[typing.Any] = [
+            self.gr_prompt
+            , self.gr_prompt_negative
+            , self.gr_apply
+            , self.gr_reset
+            , self.gr_clear_config
+        ]
+
+        for b_ui in self.layout:
+            gr_list += b_ui.getGrForWebUI()
+        
+        return gr_list
     
-    def buildContainer(self) -> typing.Any:
-        return gr.Group()
+    #! Would be better if the original config file dump function is used somehow:
+    def clearConfigFile(self):
+        path = os.path.join(b_path_base, b_file_name_config)
+        with open(path, "r+", encoding = "utf-8") as file_config:
+            config: dict[str, typing.Any] = json.load(file_config)
+            
+            config_keys = filter(lambda k: k.find(b_folder_name_script_config) == -1, config.keys())
+
+            config_new: dict[str, typing.Any] = {}
+            for k in config_keys:
+                config_new[k] = config[k]
+            
+            file_config.seek(0)
+            json.dump(config_new, file_config, indent = 4)
+            file_config.truncate()
 
 # #: Gradio Wrappers
 # class Gr_Wrapper(ABC):
@@ -2564,7 +2709,8 @@ class Script(scripts.Script):
     #bUiMap = B_Ui_Map()
     b_ui_master = B_UI_Master([
         B_UI_Container_Tab("Tab 1", [
-            B_UI_Dropdown("Dropdown 1.1", [
+            B_UI_Prompt("Base Prompt", B_Prompt_Dual("Base Prompt"), True)
+            , B_UI_Dropdown("Dropdown 1.1", [
                 B_Prompt_Single("Single Prompt 1.1.1")
                 , B_Prompt_Dual("Dual Prompt 1.1.2")
             ])
@@ -2583,11 +2729,15 @@ class Script(scripts.Script):
     
     def ui(self, is_img2img):
         #return self.bUiMap.initUI()
-        self.b_ui_master.build()
-        self.b_ui_master.bind()
-        return [B_UI._gr_prompt, B_UI._gr_prompt_negative, B_UI._gr_reset] + self.b_ui_master.getGrForWebUI()
+        return self.b_ui_master.build()
 
-    def run(self, p, prompt: str, prompt_negative: str, button_reset: str, *outputValues):
+    def run(
+            self
+            , p
+            , prompt: str
+            , prompt_negative: str
+            , *outputValues
+        ):
         # i = 0
         
         # for preset in self.bUiMap.presets:
