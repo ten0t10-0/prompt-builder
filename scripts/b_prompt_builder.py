@@ -44,6 +44,7 @@ class B_Prompt(ABC):
 
             range_min: int = 0
             range_max: int = 100
+            range_step: int = 1
 
         def __init__(
                 self
@@ -58,6 +59,7 @@ class B_Prompt(ABC):
                 , strength_negative_value: float = Defaults.strength_value
                 , prompt_range_a: str = Defaults.prompt_value
                 , prompt_range_b: str = Defaults.prompt_value
+                , range_value: int = Defaults.range_min
                 , prefix: str = Defaults.prompt_value
                 , postfix: str = Defaults.prompt_value
             ):
@@ -73,6 +75,7 @@ class B_Prompt(ABC):
             self.strength_negative = B_Value(strength_negative_value)
             self.prompt_range_a = B_Value(prompt_range_a) #!
             self.prompt_range_b = B_Value(prompt_range_b) #!
+            self.range = B_Value(range_value)
 
             self.prefix = prefix
             self.postfix = postfix
@@ -83,17 +86,18 @@ class B_Prompt(ABC):
             self.negative.reset()
             self.prompt_negative.reset()
             self.strength_negative.reset()
-            self.prompt_range_a.reset()
-            self.prompt_range_b.reset()
+            self.prompt_range_a.reset() #!
+            self.prompt_range_b.reset() #!
+            self.range.reset()
     
 
     class Fn():
         @staticmethod
-        def _promptSanitized(prompt: str) -> str:
+        def promptSanitized(prompt: str) -> str:
             return prompt.strip() if prompt is not None else ""
         
         @staticmethod
-        def _promptAdded(promptExisting: str, promptToAdd: str) -> str:
+        def promptAdded(promptExisting: str, promptToAdd: str) -> str:
             if len(promptToAdd) > 0:
                 if len(promptExisting) > 0:
                     promptExisting += ", " + promptToAdd
@@ -103,7 +107,7 @@ class B_Prompt(ABC):
             return promptExisting
         
         @staticmethod
-        def _promptDecorated(prompt: str, prefix: str = "", postfix: str = "") -> str:
+        def promptDecorated(prompt: str, prefix: str = "", postfix: str = "") -> str:
             if len(prompt) > 0:
                 if len(prefix) > 0:
                     prompt = f"{prefix} {prompt}"
@@ -113,7 +117,7 @@ class B_Prompt(ABC):
             return prompt
         
         @staticmethod
-        def _promptStrengthened(prompt: str, strength: float) -> str:
+        def promptStrengthened(prompt: str, strength: float) -> str:
             if len(prompt) == 0 or strength == B_Prompt.Values.Defaults.strength_min:
                 return ""
             
@@ -154,9 +158,9 @@ class B_Prompt_Single(B_Prompt):
         )
     
     def build(self) -> tuple[str, str]:
-        prompt = B_Prompt.Fn._promptStrengthened(
-            B_Prompt.Fn._promptDecorated(
-                B_Prompt.Fn._promptSanitized(self.values.prompt.value)
+        prompt = B_Prompt.Fn.promptStrengthened(
+            B_Prompt.Fn.promptDecorated(
+                B_Prompt.Fn.promptSanitized(self.values.prompt.value)
                 , self.values.prefix
                 , self.values.postfix
             )
@@ -189,23 +193,73 @@ class B_Prompt_Dual(B_Prompt):
         )
     
     def build(self) -> tuple[str, str]:
-        prompt = B_Prompt.Fn._promptStrengthened(
-            B_Prompt.Fn._promptDecorated(
-                B_Prompt.Fn._promptSanitized(self.values.prompt.value)
+        prompt = B_Prompt.Fn.promptStrengthened(
+            B_Prompt.Fn.promptDecorated(
+                B_Prompt.Fn.promptSanitized(self.values.prompt.value)
                 , self.values.prefix
                 , self.values.postfix
             )
             , self.values.strength.value
         )
-        prompt_negative = B_Prompt.Fn._promptStrengthened(
-            B_Prompt.Fn._promptDecorated(
-                B_Prompt.Fn._promptSanitized(self.values.prompt_negative.value)
+        prompt_negative = B_Prompt.Fn.promptStrengthened(
+            B_Prompt.Fn.promptDecorated(
+                B_Prompt.Fn.promptSanitized(self.values.prompt_negative.value)
                 , self.values.prefix
                 , self.values.postfix
             )
             , self.values.strength_negative.value
         )
         return prompt, prompt_negative
+
+class B_Prompt_Range(B_Prompt):
+    def __init__(
+            self
+            , name: str
+            , prompt_a: str
+            , prompt_b: str
+            , range_value: int = B_Prompt.Values.Defaults.range_min
+            , negative_value = B_Prompt.Values.Defaults.negative_value
+        ):
+        super().__init__(
+            name
+            , B_Prompt.Values(
+                negative_enable = True
+                , prompt_range_enable = True
+                , negative_value = negative_value
+                , prompt_range_a = prompt_a
+                , prompt_range_b = prompt_b
+                , range_value = range_value
+            )
+        )
+    
+    def build(self) -> tuple[str, str]:
+        prompt_a = B_Prompt.Fn.promptDecorated(
+            B_Prompt.Fn.promptSanitized(self.values.prompt_range_a.value)
+            , self.values.prefix
+            , self.values.postfix
+        )
+        prompt_b = B_Prompt.Fn.promptDecorated(
+            B_Prompt.Fn.promptSanitized(self.values.prompt_range_b.value)
+            , self.values.prefix
+            , self.values.postfix
+        )
+
+        value = float(self.values.range.value)
+        value = value / B_Prompt.Values.Defaults.range_max
+        value = round(1 - value, 2)
+
+        prompt: str = None
+        if value == 1:
+            prompt = prompt_a
+        elif value == 0:
+            prompt = prompt_b
+        else:
+            prompt = f"[{prompt_a}:{prompt_b}:{value}]"
+        
+        if not self.values.negative.value:
+            return prompt, ""
+        else:
+            return "", prompt
 
 class B_Prompt_Map():
     def __init__(self, b_prompts: list[B_Prompt]):
@@ -228,8 +282,8 @@ class B_Prompt_Map():
                 continue
             
             b_prompt_positive, b_prompt_negative = b_prompt.build()
-            prompt = B_Prompt.Fn._promptAdded(prompt, b_prompt_positive)
-            prompt_negative = B_Prompt.Fn._promptAdded(prompt_negative, b_prompt_negative)
+            prompt = B_Prompt.Fn.promptAdded(prompt, b_prompt_positive)
+            prompt_negative = B_Prompt.Fn.promptAdded(prompt_negative, b_prompt_negative)
         
         return [prompt, prompt_negative]
 
@@ -294,6 +348,8 @@ class B_UI_Prompt(B_UI):
         self.gr_prompt_negative: typing.Any = None
         self.gr_strength_negative: typing.Any = None
 
+        self.gr_slider: typing.Any = None
+
         self.gr_negative: typing.Any = None
 
         self.gr_button_apply: typing.Any = None
@@ -340,6 +396,15 @@ class B_UI_Prompt(B_UI):
                         , step = B_Prompt.Values.Defaults.strength_step
                     )
             
+            self.gr_slider = gr.Slider(
+                label = "Range"
+                , value = values.range.value
+                , minimum = B_Prompt.Values.Defaults.range_min
+                , maximum = B_Prompt.Values.Defaults.range_max
+                , step = B_Prompt.Values.Defaults.range_step
+                , visible = values.prompt_range_enable
+            )
+            
             self.gr_negative = gr.Checkbox(
                 label = "Negative?"
                 , value = values.negative.value
@@ -384,6 +449,7 @@ class B_UI_Prompt(B_UI):
             , self.gr_negative
             , self.gr_prompt_negative
             , self.gr_strength_negative
+            , self.gr_slider
             , self.gr_button_apply
             , self.gr_button_remove
         ]
@@ -412,6 +478,9 @@ class B_UI_Prompt(B_UI):
         strength_negative = float(inputValues[offset])
         offset += 1
 
+        range = int(inputValues[offset])
+        offset += 1
+
         negative = bool(inputValues[offset])
         offset += 1
 
@@ -421,6 +490,7 @@ class B_UI_Prompt(B_UI):
             self.b_prompt.values.negative.value = negative
             self.b_prompt.values.prompt_negative.value = prompt_negative
             self.b_prompt.values.strength_negative.value = strength_negative
+            self.b_prompt.values.range.value = range
             b_prompt_map.update(self.b_prompt)
 
         return offset
@@ -431,6 +501,7 @@ class B_UI_Prompt(B_UI):
             , self.gr_strength
             , self.gr_prompt_negative
             , self.gr_strength_negative
+            , self.gr_slider
             , self.gr_negative
         ]
     
@@ -443,6 +514,7 @@ class B_UI_Prompt(B_UI):
             , self.gr_prompt_negative_container
             , self.gr_prompt_negative
             , self.gr_strength_negative
+            , self.gr_slider
             , self.gr_negative
             , self.gr_button_remove
         ]
@@ -458,6 +530,7 @@ class B_UI_Prompt(B_UI):
             , self.gr_prompt_negative_container.update(visible = values.prompt_negative_enable)
             , values.prompt_negative.value
             , values.strength_negative.value
+            , self.gr_slider.update(visible = values.prompt_range_enable, value = values.range.value, step = B_Prompt.Values.Defaults.range_step)
             , self.gr_negative.update(visible = values.negative_enable, value = values.negative.value)
             , self.gr_button_remove.update(visible = visible_button_remove)
         ]
@@ -2878,6 +2951,7 @@ class Script(scripts.Script):
             , B_UI_Dropdown("Dropdown 1.1", [
                 B_Prompt_Single("Single Prompt 1.1.1")
                 , B_Prompt_Dual("Dual Prompt 1.1.2")
+                , B_Prompt_Range("Range Prompt 1.1.3", "male", "female", 50)
             ])
             , B_UI_Dropdown("Dropdown 1.2", [
                 B_Prompt_Single("Single Prompt 1.2.1")
