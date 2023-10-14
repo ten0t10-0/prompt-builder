@@ -688,12 +688,17 @@ class B_UI_Dropdown(B_UI):
         return [self.choice.value] + self.b_prompt_ui.getOutputUpdate(b_prompt_map)
 
 class B_UI_Container(B_UI, ABC):
-    def __init__(self, name: str, children: list[B_UI] = None):
+    def __init__(self, name: str, children: list[B_UI] = None, build_button_reset: bool = False, build_button_random: bool = False):
         super().__init__(name)
 
         self.children = children if children is not None else []
 
+        self.build_button_reset = build_button_reset
+        self.build_button_random = build_button_random
+
         self.gr_container: typing.Any = None
+        self.gr_reset: typing.Any = None
+        self.gr_random: typing.Any = None
     
     def getBPrompts(self) -> list[B_Prompt]:
         b_prompt_list: list[B_Prompt] = []
@@ -706,13 +711,54 @@ class B_UI_Container(B_UI, ABC):
         with self.gr_container:
             for b_ui in self.children:
                 b_ui.build(b_prompt_map)
+            
+            if self.build_button_reset or self.build_button_random:
+                def _buildReset():
+                    self.gr_reset = gr.Button(f"Reset {self.name}")
+                def _buildRandomize():
+                    self.gr_random = gr.Button(f"Randomize {self.name}")
+
+                B_UI._buildSeparator()
+                
+                if self.build_button_reset and self.build_button_random:
+                    with gr.Row():
+                        _buildRandomize()
+                        _buildReset()
+                elif self.build_button_random:
+                    _buildRandomize()
+                else:
+                    _buildReset()
+                        
+                        
     
     def bind(self, b_prompt_map: B_Prompt_Map, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
+        # Children
         for b_ui in self.children:
             b_ui.bind(b_prompt_map, gr_prompt, gr_prompt_negative)
+        
+        # Self
+        # - Reset
+        if self.build_button_reset:
+            def _reset():
+                for b_ui in self.children:
+                    b_ui.reset(b_prompt_map)
+                
+                return b_prompt_map.buildPromptUpdate() + self.getOutputUpdate(b_prompt_map)
+            self.gr_reset.click(
+                fn = _reset
+                , outputs = [gr_prompt, gr_prompt_negative] + self.getOutput()
+            )
+        
+        #! - Randomize
     
     def getGrForWebUI(self) -> list[typing.Any]:
         gr_list: list[typing.Any] = []
+
+        if self.build_button_random:
+            gr_list.append(self.gr_random)
+        if self.build_button_reset:
+            gr_list.append(self.gr_reset)
+        
         for b_ui in self.children:
             gr_list += b_ui.getGrForWebUI()
         return gr_list
@@ -750,22 +796,22 @@ class B_UI_Container(B_UI, ABC):
         pass
 
 class B_UI_Container_Tab(B_UI_Container):
-    def __init__(self, name: str = "Tab", children: list[B_UI] = None):
-        super().__init__(name, children)
+    def __init__(self, name: str = "Tab", children: list[B_UI] = None, build_button_reset: bool = True, build_button_random: bool = True):
+        super().__init__(name, children, build_button_reset, build_button_random)
     
     def buildContainer(self) -> typing.Any:
         return gr.Tab(self.name)
 
 class B_UI_Container_Row(B_UI_Container):
-    def __init__(self, name: str = "Row", children: list[B_UI] = None):
-        super().__init__(name, children)
+    def __init__(self, name: str = "Row", children: list[B_UI] = None, build_button_reset: bool = False, build_button_random: bool = False):
+        super().__init__(name, children, build_button_reset, build_button_random)
     
     def buildContainer(self) -> typing.Any:
         return gr.Row()
 
 class B_UI_Container_Column(B_UI_Container):
-    def __init__(self, name: str = "Column", children: list[B_UI] = None, scale: int = 1):
-        super().__init__(name, children)
+    def __init__(self, name: str = "Column", children: list[B_UI] = None, scale: int = 1, build_button_reset: bool = False, build_button_random: bool = False):
+        super().__init__(name, children, build_button_reset, build_button_random)
 
         self.scale = scale
     
@@ -773,15 +819,15 @@ class B_UI_Container_Column(B_UI_Container):
         return gr.Column(scale = self.scale)
 
 class B_UI_Container_Accordion(B_UI_Container):
-    def __init__(self, name: str = "Accordion", children: list[B_UI] = None):
-        super().__init__(name, children)
+    def __init__(self, name: str = "Accordion", children: list[B_UI] = None, build_button_reset: bool = False, build_button_random: bool = False):
+        super().__init__(name, children, build_button_reset, build_button_random)
     
     def buildContainer(self) -> typing.Any:
         return gr.Accordion(self.name)
 
 class B_UI_Container_Group(B_UI_Container):
-    def __init__(self, name: str = "Group", children: list[B_UI] = None):
-        super().__init__(name, children)
+    def __init__(self, name: str = "Group", children: list[B_UI] = None, build_button_reset: bool = False, build_button_random: bool = False):
+        super().__init__(name, children, build_button_reset, build_button_random)
     
     def buildContainer(self) -> typing.Any:
         return gr.Group()
@@ -832,7 +878,7 @@ class B_UI_Master():
         
         # - Self
         gr_inputs: list[typing.Any] = []
-        gr_outputs: list[typing.Any] = [self.gr_prompt, self.gr_prompt_negative]
+        gr_outputs: list[typing.Any] = []
         for b_ui in self.layout:
             gr_inputs += b_ui.getInput()
             gr_outputs += b_ui.getOutput()
@@ -840,12 +886,12 @@ class B_UI_Master():
         self.gr_apply.click(
             fn = self.apply
             , inputs = gr_inputs
-            , outputs = gr_outputs
+            , outputs = [self.gr_prompt, self.gr_prompt_negative] + gr_outputs
         )
 
         self.gr_reset.click(
             fn = self.reset
-            , outputs = gr_outputs
+            , outputs = [self.gr_prompt, self.gr_prompt_negative] + gr_outputs
         )
         
         self.gr_clear_config.click(fn = self.clearConfigFile)
@@ -870,11 +916,7 @@ class B_UI_Master():
             b_ui.update(self.b_prompt_map, *inputValues[offset:])
         
         #! repeating
-        prompt = self.b_prompt_map.buildPromptUpdate()
-        gr_updates: list[typing.Any] = [
-            prompt[0]
-            , prompt[1]
-        ]
+        gr_updates: list[typing.Any] = self.b_prompt_map.buildPromptUpdate()
         for b_ui in self.layout:
             gr_updates += b_ui.getOutputUpdate(self.b_prompt_map)
         
@@ -885,11 +927,7 @@ class B_UI_Master():
             b_ui.reset(self.b_prompt_map)
         
         #! repeating ^
-        prompt = self.b_prompt_map.buildPromptUpdate()
-        gr_updates: list[typing.Any] = [
-            prompt[0]
-            , prompt[1]
-        ]
+        gr_updates: list[typing.Any] = self.b_prompt_map.buildPromptUpdate()
         for b_ui in self.layout:
             gr_updates += b_ui.getOutputUpdate(self.b_prompt_map)
         
