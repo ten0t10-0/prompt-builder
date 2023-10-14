@@ -87,10 +87,10 @@ class B_Prompt(ABC):
             self.negative = B_Value(negative_value)
             self.prompt_negative = B_Value(prompt_negative_value)
             self.strength_negative = B_Value(strength_negative_value)
-            self.prompt_range_a = B_Value(prompt_range_a) #!
-            self.prompt_range_b = B_Value(prompt_range_b) #!
             self.range = B_Value(range_value)
 
+            self.prompt_a = prompt_range_a
+            self.prompt_b = prompt_range_b
             self.prefix = prefix
             self.postfix = postfix
         
@@ -100,8 +100,6 @@ class B_Prompt(ABC):
             self.negative.reset()
             self.prompt_negative.reset()
             self.strength_negative.reset()
-            self.prompt_range_a.reset() #!
-            self.prompt_range_b.reset() #!
             self.range.reset()
     
 
@@ -163,7 +161,9 @@ class B_Prompt_Single(B_Prompt):
         prompt_value = args.get(B_Prompt.Values.Keys.prompt, B_Prompt.Values.Defaults.prompt)
         strength_value = float(args.get(B_Prompt.Values.Keys.strength, B_Prompt.Values.Defaults.strength))
         negative_value = bool(int(args.get(B_Prompt.Values.Keys.negative, int(B_Prompt.Values.Defaults.negative))))
-        return B_Prompt_Single(name, prompt_value, strength_value, negative_value)
+        prefix = args.get(B_Prompt.Values.Keys.prefix, B_Prompt.Values.Defaults.prompt)
+        postfix = args.get(B_Prompt.Values.Keys.postfix, B_Prompt.Values.Defaults.prompt)
+        return B_Prompt_Single(name, prompt_value, strength_value, negative_value, prefix, postfix)
     
     def __init__(
             self
@@ -171,6 +171,8 @@ class B_Prompt_Single(B_Prompt):
             , prompt_value = B_Prompt.Values.Defaults.prompt
             , strength_value = B_Prompt.Values.Defaults.strength
             , negative_value = B_Prompt.Values.Defaults.negative
+            , prefix = B_Prompt.Values.Defaults.prompt
+            , postfix = B_Prompt.Values.Defaults.prompt
         ):
         super().__init__(
             name
@@ -180,6 +182,8 @@ class B_Prompt_Single(B_Prompt):
                 , prompt_value = prompt_value
                 , strength_value = strength_value
                 , negative_value = negative_value
+                , prefix = prefix
+                , postfix = postfix
             )
         )
     
@@ -313,15 +317,14 @@ class B_Prompt_Range(B_Prompt):
     
     def build(self) -> tuple[str, str]:
         return B_Prompt_Range._build(
-            self.values.prompt_range_a.value
-            , self.values.prompt_range_b.value
+            self.values.prompt_a
+            , self.values.prompt_b
             , self.values.prefix
             , self.values.postfix
             , self.values.range.value
             , self.values.negative.value
         )
 
-#!!!
 class B_Prompt_Range_Link(B_Prompt):
     @staticmethod
     def _fromArgs(name: str, args: dict[str, str]):
@@ -350,12 +353,12 @@ class B_Prompt_Range_Link(B_Prompt):
         )
 
         self.link_name = link_name
-        self.link: B_Prompt_Range = None
+        self.link: B_Prompt_Range = None #!
     
     def build(self) -> tuple[str, str]:
         return B_Prompt_Range._build(
-            self.values.prompt_range_a.value
-            , self.values.prompt_range_b.value
+            self.values.prompt_a
+            , self.values.prompt_b
             , self.values.prefix
             , self.values.postfix
             , self.link.values.range.value
@@ -465,6 +468,9 @@ class B_UI_Separator(B_UI):
     def build(self, b_prompt_map: B_Prompt_Map) -> None:
         B_UI_Separator._build()
     
+    def bind(self, b_prompt_map: B_Prompt_Map, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
+        pass
+    
     def getGrForWebUI(self) -> list[typing.Any]:
         return []
     
@@ -484,6 +490,9 @@ class B_UI_Separator(B_UI):
         return []
 
 class B_UI_Prompt(B_UI):
+    _prompt_scale: int = 4
+    _strength_scale: int = 1
+
     #!
     @staticmethod
     def _fromArgs(args: dict[str, str], name: str = "Prompt"):
@@ -529,32 +538,35 @@ class B_UI_Prompt(B_UI):
         with self.gr_container:
             self.gr_markdown = gr.Markdown(visible = visible_name, value = name)
 
-            with gr.Row():
-                self.gr_prompt_container = gr.Column(visible = values.prompt_enable)
-                with self.gr_prompt_container:
-                    self.gr_prompt = gr.Textbox(
-                        label = "Prompt"
-                        , value = values.prompt.value
-                    )
-                    self.gr_strength = gr.Number(
-                        label = "Strength"
-                        , value = values.strength.value
-                        , minimum = B_Prompt.Values.Defaults.strength_min
-                        , step = B_Prompt.Values.Defaults.strength_step
-                    )
-                
-                self.gr_prompt_negative_container = gr.Column(visible = values.prompt_negative_enable)
-                with self.gr_prompt_negative_container:
-                    self.gr_prompt_negative = gr.Textbox(
-                        label = "Prompt (N)"
-                        , value = values.prompt_negative.value
-                    )
-                    self.gr_strength_negative = gr.Number(
-                        label = "Strength (N)"
-                        , value = values.strength_negative.value
-                        , minimum = B_Prompt.Values.Defaults.strength_min
-                        , step = B_Prompt.Values.Defaults.strength_step
-                    )
+            self.gr_prompt_container = gr.Row(visible = values.prompt_enable)
+            with self.gr_prompt_container:
+                self.gr_prompt = gr.Textbox(
+                    label = "Prompt"
+                    , value = values.prompt.value
+                    , scale = B_UI_Prompt._prompt_scale
+                )
+                self.gr_strength = gr.Number(
+                    label = "Strength"
+                    , value = values.strength.value
+                    , minimum = B_Prompt.Values.Defaults.strength_min
+                    , step = B_Prompt.Values.Defaults.strength_step
+                    , scale = B_UI_Prompt._strength_scale
+                )
+            
+            self.gr_prompt_negative_container = gr.Row(visible = values.prompt_negative_enable)
+            with self.gr_prompt_negative_container:
+                self.gr_prompt_negative = gr.Textbox(
+                    label = "Prompt (N)"
+                    , value = values.prompt_negative.value
+                    , scale = B_UI_Prompt._prompt_scale
+                )
+                self.gr_strength_negative = gr.Number(
+                    label = "Strength (N)"
+                    , value = values.strength_negative.value
+                    , minimum = B_Prompt.Values.Defaults.strength_min
+                    , step = B_Prompt.Values.Defaults.strength_step
+                    , scale = B_UI_Prompt._strength_scale
+                )
             
             self.gr_slider = gr.Slider(
                 label = "Range"
@@ -730,13 +742,49 @@ class B_UI_Dropdown(B_UI):
             name
             , bool(int(args.get("sort", 1)))
             , applied_default
+            , args.get(B_Prompt.Values.Keys.prefix, B_Prompt.Values.Defaults.prompt)
+            , args.get(B_Prompt.Values.Keys.postfix, B_Prompt.Values.Defaults.prompt)
         )
+    
+    @staticmethod
+    def _buildColorChoicesList(postfix: str = "") -> list[B_Prompt_Single]:
+        return list(map(
+            lambda text: B_Prompt_Single(
+                f"{text} {postfix}"
+                , text.lower()
+                , postfix = postfix
+            )
+            , [
+                "Dark"
+                , "Light"
+                , "Black"
+                , "Grey"
+                , "White"
+                , "Brown"
+                , "Blue"
+                , "Green"
+                , "Red"
+                , "Blonde"
+                , "Rainbow"
+                , "Pink"
+                , "Purple"
+                , "Orange"
+                , "Yellow"
+                , "Multicolored"
+                , "Pale"
+                , "Silver"
+                , "Gold"
+                , "Tan"
+            ]
+        ))
     
     def __init__(
             self
             , name: str = "Dropdown"
             , sort_choices: bool = True
             , b_prompts_applied_default: list[str] = None
+            , prefix = B_Prompt.Values.Defaults.prompt
+            , postfix = B_Prompt.Values.Defaults.prompt
             , b_prompts: list[B_Prompt] = None
         ):
         super().__init__(name)
@@ -744,8 +792,14 @@ class B_UI_Dropdown(B_UI):
         self.choice = B_UI_Dropdown._choice_empty
         self.sort_choices = sort_choices
         self.b_prompts_applied_default = b_prompts_applied_default if b_prompts_applied_default is not None else []
+        self.prefix = prefix
+        self.postfix = postfix
 
-        self.choice_list = b_prompts if b_prompts is not None else []
+        self.choice_list: list[B_Prompt] = []
+        if b_prompts is not None:
+            for b_prompt in b_prompts:
+                self.addChoice(b_prompt)
+        
         self.choice_map: dict[str, B_Prompt] = {}
         
         self.gr_dropdown: typing.Any = None
@@ -830,9 +884,31 @@ class B_UI_Dropdown(B_UI):
     def getOutputUpdate(self, b_prompt_map: B_Prompt_Map) -> list[typing.Any]:
         return [self.choice] + self.b_prompt_ui.getOutputUpdate(b_prompt_map)
     
+    #!
     def addChoice(self, item: B_Prompt):
-        item.is_standalone = False #!
+        item.is_standalone = False
+
+        if len(item.values.prefix) == 0:
+            item.values.prefix = self.prefix
+        if len(item.values.postfix) == 0:
+            item.values.postfix = self.postfix
+        
         self.choice_list.append(item)
+    
+    def addChoices(self, args: dict[str, str]):
+        b_prompt_list: list[B_Prompt] = None
+        
+        special_type = args.get("type", "")
+        match special_type:
+            case "COLOR":
+                postfix = args.get(B_Prompt.Values.Keys.postfix, "")
+                b_prompt_list = self._buildColorChoicesList(postfix)
+            case _:
+                print(f"WARNING: Invalid CHOICES type in {self.name} -> {special_type}")
+        
+        if b_prompt_list is not None:
+            for b_prompt in b_prompt_list:
+                self.addChoice(b_prompt)
 
 class B_UI_Container(B_UI, ABC):
     def __init__(self, name: str, build_button_reset: bool = False, build_button_random: bool = False, children: list[B_UI] = None):
@@ -1176,11 +1252,11 @@ class B_UI_Master():
                         
                         stack_dropdowns.append(B_UI_Dropdown._fromArgs(l_args, l_name))
                     
-                    # case "CHOICES":
-                    #     if ignore:
-                    #         continue
+                    case "CHOICES":
+                        if ignore:
+                            continue
 
-                    #     stack_selects[-1].addChoices(l_args)
+                        stack_dropdowns[-1].addChoices(l_args) #!
                     
                     # case "SET":
                     #     select_choice_has_preset = True

@@ -20,25 +20,27 @@ TAB Some Tab
 	#		SET SomethingA - SomethingB --r 15
 	#	END
 	#END
+
+	SEPARATOR
 	
-	#SELECT Some Dropdown With Prefix and Postfix --prefix somePrefix --postfix somePostfix
-	#	SINGLE ChoiceA --pp promptA
-	#	SINGLE ChoiceB --pp promptB
-	#END
+	SELECT Some Dropdown With Prefix and Postfix --prefix somePrefix --postfix somePostfix
+		SINGLE ChoiceA --pp promptA
+		SINGLE ChoiceB --pp promptB
+	END
 END
 
 TAB Some Tagged Tab --x 1 --build_reset_button 0
 	ROW
 		COLUMN --scale 2
-			RANGE SomethingA - SomethingB --a promptA --b promptB --r 0 --a_button A --b_button B
+			RANGE SomethingA - SomethingB --a promptA --b promptB --r 35 --a_button A --b_button B
 		END
 		
 		COLUMN --scale 1
-			#SELECT Some Color Dropdown
-			#	CHOICES --type COLOR --postfix something
-			#END
+			SELECT Some Color Dropdown --v Red something, Black something
+				CHOICES --type COLOR --postfix something
+			END
 
-			SELECT Some Unsorted Dropdown --sort 0
+			SELECT Some Unsorted Dropdown --sort 0 --v Some Special Choice
 				RANGE_LINK Some Special Choice --link SomethingA - SomethingB --a promptX --b promptY
 				DUAL ChoiceB --pp promptB
 				DUAL ChoiceA --pp promptA
