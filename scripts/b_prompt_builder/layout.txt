@@ -1,60 +1,47 @@
-GROUP All --build_reset_button 1 --build_random_button 1
-	TAB Some Tab
-		ACCORDION Some Accordion
-			SINGLE Positive prompt --s 1.3
-			
-			SINGLE Negative prompt --n 1 --v promptA, promptB
-		END
-
-		SELECT Some Dropdown --v ChoiceA, ChoiceB --multi_select 1
-			DUAL ChoiceA --vp promptA
-			DUAL ChoiceB --vp promptB --vn promptC
-			DUAL ChoiceC --vn promptC
-			#DUAL Commented Out Choice --vp promptA
-		END
-
-		SELECT Some Simple Dropdown --simple 1
-			DUAL ChoiceA --vp promptA
-			DUAL ChoiceB --vp promptB --vn promptC
-		END
-
-		SELECT Some Dropdown With Preset Choice --multi_select 1
-			DUAL ChoiceA --vp promptA
-			DUAL ChoiceB --vp promptB
-				SET Positive prompt --v somePositivePrompt
-				SET Some Color Multi-select Dropdown --v Black, White
-				SET SomethingA - SomethingB --v 15
-			END
-		END
+TAB Some Tab
+	ACCORDION Some Accordion
+		SINGLE Positive prompt --sp 1.3
 		
-		SELECT Some Dropdown With Prefix and Postfix --prefix somePrefix --postfix somePostfix
-			SINGLE ChoiceA --v promptA
-			SINGLE ChoiceB --v promptB
-		END
+		SINGLE Negative prompt --n 1 --pp promptA, promptB
 	END
 
-	TAB Some Tagged Tab --x 1 --build_reset_button 0
-		ROW
-			COLUMN --scale 2
-				RANGE SomethingA - SomethingB --a promptA --b promptB --v 0 --is_required 0 --a_button A --b_button B
+	SELECT Some Dropdown --v ChoiceA
+		DUAL ChoiceA --pp promptA
+		DUAL ChoiceB --pp promptB --pn promptC
+		DUAL ChoiceC --pn promptC
+		#DUAL Commented Out Choice --pp promptA
+	END
 
-				RANGE SomethingA - SomethingB (Required) --a promptA --b promptB --v 75 --is_required 1 --build_buttons 0
-			END
-			
-			COLUMN --scale 1
-				SELECT Some Color Dropdown --simple 1
-					CHOICES --type COLOR --postfix something
-				END
+	#SELECT Some Dropdown With Preset Choice
+	#	DUAL ChoiceA --pp promptA
+	#	DUAL ChoiceB --pp promptB
+	#		SET Positive prompt --pp somePositivePrompt
+	#		SET Some Color Multi-select Dropdown --v Black, White
+	#		SET SomethingA - SomethingB --r 15
+	#	END
+	#END
+	
+	#SELECT Some Dropdown With Prefix and Postfix --prefix somePrefix --postfix somePostfix
+	#	SINGLE ChoiceA --pp promptA
+	#	SINGLE ChoiceB --pp promptB
+	#END
+END
 
-				SELECT Some Color Multi-select Dropdown --multi_select 1 --simple 1
-					CHOICES --type COLOR --postfix something
-				END
+TAB Some Tagged Tab --x 1 --build_reset_button 0
+	ROW
+		COLUMN --scale 2
+			RANGE SomethingA - SomethingB --a promptA --b promptB --r 0 --a_button A --b_button B
+		END
+		
+		COLUMN --scale 1
+			#SELECT Some Color Dropdown
+			#	CHOICES --type COLOR --postfix something
+			#END
 
-				SELECT Some Unsorted Dropdown --multi_select 1 --sort 0
-					RANGE_LINK Some Special Choice --link SomethingA - SomethingB --a promptX --b promptY
-					DUAL ChoiceB --vp promptB
-					DUAL ChoiceA --vp promptA
-				END
+			SELECT Some Unsorted Dropdown --sort 0
+				RANGE_LINK Some Special Choice --link SomethingA - SomethingB --a promptX --b promptY
+				DUAL ChoiceB --pp promptB
+				DUAL ChoiceA --pp promptA
 			END
 		END
 	END
