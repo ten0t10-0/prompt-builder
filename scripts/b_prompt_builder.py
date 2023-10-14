@@ -212,12 +212,49 @@ class B_Prompt_Dual(B_Prompt):
         return prompt, prompt_negative
 
 class B_Prompt_Range(B_Prompt):
+    @staticmethod
+    def _build(
+        prompt_a: str
+        , prompt_b: str
+        , prefix: str
+        , postfix: str
+        , range: int
+        , negative: bool
+    ) -> tuple[str, str]:
+        prompt_a = B_Prompt.Fn.promptDecorated(
+            B_Prompt.Fn.promptSanitized(prompt_a)
+            , prefix
+            , postfix
+        )
+        prompt_b = B_Prompt.Fn.promptDecorated(
+            B_Prompt.Fn.promptSanitized(prompt_b)
+            , prefix
+            , postfix
+        )
+
+        value = float(range)
+        value = value / B_Prompt.Values.Defaults.range_max
+        value = round(1 - value, 2)
+
+        prompt: str = None
+        if value == 1:
+            prompt = prompt_a
+        elif value == 0:
+            prompt = prompt_b
+        else:
+            prompt = f"[{prompt_a}:{prompt_b}:{value}]"
+        
+        if not negative:
+            return prompt, ""
+        else:
+            return "", prompt
+    
     def __init__(
             self
             , name: str
             , prompt_a: str
             , prompt_b: str
-            , range_value: int = B_Prompt.Values.Defaults.range_min
+            , range_value = B_Prompt.Values.Defaults.range_min
             , negative_value = B_Prompt.Values.Defaults.negative_value
         ):
         super().__init__(
@@ -233,33 +270,45 @@ class B_Prompt_Range(B_Prompt):
         )
     
     def build(self) -> tuple[str, str]:
-        prompt_a = B_Prompt.Fn.promptDecorated(
-            B_Prompt.Fn.promptSanitized(self.values.prompt_range_a.value)
+        return B_Prompt_Range._build(
+            self.values.prompt_range_a.value
+            , self.values.prompt_range_b.value
             , self.values.prefix
             , self.values.postfix
+            , self.values.range.value
+            , self.values.negative.value
         )
-        prompt_b = B_Prompt.Fn.promptDecorated(
-            B_Prompt.Fn.promptSanitized(self.values.prompt_range_b.value)
+
+class B_Prompt_Range_Link(B_Prompt):
+    def __init__(
+            self
+            , name: str
+            , prompt_a: str
+            , prompt_b: str
+            , negative_value: B_Prompt.Values.Defaults.negative_value
+            , link: B_Prompt_Range
+        ):
+        super().__init__(
+            name
+            , B_Prompt.Values(
+                negative_enable = True
+                , negative_value = negative_value
+                , prompt_range_a = prompt_a
+                , prompt_range_b = prompt_b
+            )
+        )
+
+        self.link = link
+    
+    def build(self) -> tuple[str, str]:
+        return B_Prompt_Range._build(
+            self.values.prompt_range_a.value
+            , self.values.prompt_range_b.value
             , self.values.prefix
             , self.values.postfix
+            , self.link.values.range.value
+            , self.values.negative.value
         )
-
-        value = float(self.values.range.value)
-        value = value / B_Prompt.Values.Defaults.range_max
-        value = round(1 - value, 2)
-
-        prompt: str = None
-        if value == 1:
-            prompt = prompt_a
-        elif value == 0:
-            prompt = prompt_b
-        else:
-            prompt = f"[{prompt_a}:{prompt_b}:{value}]"
-        
-        if not self.values.negative.value:
-            return prompt, ""
-        else:
-            return "", prompt
 
 class B_Prompt_Map():
     def __init__(self, b_prompts: list[B_Prompt]):
@@ -332,13 +381,14 @@ class B_UI(ABC):
         pass
 
 class B_UI_Prompt(B_UI):
-    def __init__(self, name: str = "Prompt", b_prompt: B_Prompt = None, show_name: bool = False):
+    def __init__(self, name: str = "Prompt", b_prompt: B_Prompt = None):
         super().__init__(name)
 
         self.b_prompt = b_prompt
-        self.show_name = show_name
 
         self.gr_container: typing.Any = None
+
+        self.gr_markdown: typing.Any = None
 
         self.gr_prompt_container: typing.Any = None
         self.gr_prompt: typing.Any = None
@@ -362,13 +412,12 @@ class B_UI_Prompt(B_UI):
             return []
 
     def build(self, b_prompt_map: B_Prompt_Map) -> None:
-        values, visible, visible_button_remove = self.getUpdateValues(b_prompt_map)
+        values, name, visible, visible_name, visible_button_remove = self.getUpdateValues(b_prompt_map)
         
-        self.gr_container = (
-            gr.Column(variant = "panel", visible = visible) if not self.show_name else 
-            gr.Accordion(self.name, open = False, visible = visible)
-        )
+        self.gr_container = gr.Column(variant = "panel", visible = visible)
         with self.gr_container:
+            self.gr_markdown = gr.Markdown(visible = visible_name, value = name)
+
             with gr.Row():
                 self.gr_prompt_container = gr.Column(visible = values.prompt_enable)
                 with self.gr_prompt_container:
@@ -427,11 +476,16 @@ class B_UI_Prompt(B_UI):
         def _fnApply(*inputValues):
             self.update(b_prompt_map, *inputValues)
             return [self.gr_button_remove.update(visible = True)] + b_prompt_map.buildPromptUpdate()
-        self.gr_button_apply.click(
-            fn = _fnApply
-            , inputs = self.getInput()
-            , outputs = [self.gr_button_remove, gr_prompt, gr_prompt_negative]
-        )
+        applyArgs = {
+            "fn": _fnApply
+            , "inputs": self.getInput()
+            , "outputs": [self.gr_button_remove, gr_prompt, gr_prompt_negative]
+        }
+        self.gr_prompt.submit(**applyArgs)
+        self.gr_strength.submit(**applyArgs)
+        self.gr_prompt_negative.submit(**applyArgs)
+        self.gr_strength_negative.submit(**applyArgs)
+        self.gr_button_apply.click(**applyArgs)
 
         # Remove
         def _fnRemove():
@@ -508,6 +562,7 @@ class B_UI_Prompt(B_UI):
     def getOutput(self) -> list[typing.Any]:
         return [
             self.gr_container
+            , self.gr_markdown
             , self.gr_prompt_container
             , self.gr_prompt
             , self.gr_strength
@@ -520,10 +575,11 @@ class B_UI_Prompt(B_UI):
         ]
     
     def getOutputUpdate(self, b_prompt_map: B_Prompt_Map) -> list[typing.Any]:
-        values, visible, visible_button_remove = self.getUpdateValues(b_prompt_map)
+        values, name, visible, visible_name, visible_button_remove = self.getUpdateValues(b_prompt_map)
 
         return [
             self.gr_container.update(visible = visible)
+            , self.gr_markdown.update(visible = visible_name, value = name)
             , self.gr_prompt_container.update(visible = values.prompt_enable)
             , values.prompt.value
             , values.strength.value
@@ -535,13 +591,16 @@ class B_UI_Prompt(B_UI):
             , self.gr_button_remove.update(visible = visible_button_remove)
         ]
     
-    def getUpdateValues(self, b_prompt_map: B_Prompt_Map) -> tuple[B_Prompt.Values, bool, bool]:
+    def getUpdateValues(self, b_prompt_map: B_Prompt_Map) -> tuple[B_Prompt.Values, str, bool, bool, bool]:
         values = self.b_prompt.values if self.b_prompt is not None else B_Prompt.Values()
+        name = f"**{self.b_prompt.name if self.b_prompt is not None else self.name}**"
         visible = self.b_prompt is not None
+        visible_name = self.b_prompt.is_standalone if self.b_prompt is not None else False
         visible_button_remove = b_prompt_map.isSelected(self.b_prompt)
-        return values, visible, visible_button_remove
+        return values, name, visible, visible_name, visible_button_remove
     
-    def getUpdateInit(self, b_prompt: B_Prompt, b_prompt_map: B_Prompt_Map) -> list:
+    #!
+    def getOutputUpdate_Init(self, b_prompt: B_Prompt, b_prompt_map: B_Prompt_Map) -> list:
         self.b_prompt = b_prompt
         return self.getOutputUpdate(b_prompt_map)
 
@@ -588,7 +647,7 @@ class B_UI_Dropdown(B_UI):
         # Self
         def _onSelect(choice: str):
             b_prompt = self.choice_map.get(choice)
-            return self.b_prompt_ui.getUpdateInit(b_prompt, b_prompt_map)
+            return self.b_prompt_ui.getOutputUpdate_Init(b_prompt, b_prompt_map)
         self.gr_dropdown.select(
             fn = _onSelect
             , inputs = self.gr_dropdown
@@ -696,6 +755,36 @@ class B_UI_Container_Tab(B_UI_Container):
     
     def buildContainer(self) -> typing.Any:
         return gr.Tab(self.name)
+
+class B_UI_Container_Row(B_UI_Container):
+    def __init__(self, name: str = "Row", children: list[B_UI] = None):
+        super().__init__(name, children)
+    
+    def buildContainer(self) -> typing.Any:
+        return gr.Row()
+
+class B_UI_Container_Column(B_UI_Container):
+    def __init__(self, name: str = "Column", children: list[B_UI] = None, scale: int = 1):
+        super().__init__(name, children)
+
+        self.scale = scale
+    
+    def buildContainer(self) -> typing.Any:
+        return gr.Column(scale = self.scale)
+
+class B_UI_Container_Accordion(B_UI_Container):
+    def __init__(self, name: str = "Accordion", children: list[B_UI] = None):
+        super().__init__(name, children)
+    
+    def buildContainer(self) -> typing.Any:
+        return gr.Accordion(self.name)
+
+class B_UI_Container_Group(B_UI_Container):
+    def __init__(self, name: str = "Group", children: list[B_UI] = None):
+        super().__init__(name, children)
+    
+    def buildContainer(self) -> typing.Any:
+        return gr.Group()
 
 class B_UI_Master():
     def __init__(self, layout: list[B_UI]):
@@ -2947,15 +3036,21 @@ class Script(scripts.Script):
     #bUiMap = B_Ui_Map()
     b_ui_master = B_UI_Master([
         B_UI_Container_Tab("Tab 1", [
-            B_UI_Prompt("Base Prompt", B_Prompt_Dual("Base Prompt", prompt_negative_value = "low res, lowres, blurry, low quality, bad anatomy, bad body anatomy, unusual anatomy, letterbox, deformity, mutilated, malformed, amputee, sketch, monochrome"), True)
-            , B_UI_Dropdown("Dropdown 1.1", [
-                B_Prompt_Single("Single Prompt 1.1.1")
-                , B_Prompt_Dual("Dual Prompt 1.1.2")
-                , B_Prompt_Range("Range Prompt 1.1.3", "male", "female", 50)
-            ])
-            , B_UI_Dropdown("Dropdown 1.2", [
-                B_Prompt_Single("Single Prompt 1.2.1")
-                , B_Prompt_Dual("Dual Prompt 1.2.2")
+            B_UI_Prompt("Base Prompt", B_Prompt_Dual("Base Prompt", prompt_negative_value = "low res, lowres, blurry, low quality, bad anatomy, bad body anatomy, unusual anatomy, letterbox, deformity, mutilated, malformed, amputee, sketch, monochrome"))
+            , B_UI_Container_Row(children = [
+                B_UI_Container_Column(scale = 2, children = [
+                    B_UI_Dropdown("Dropdown 1.1", [
+                        B_Prompt_Single("Single Prompt 1.1.1")
+                        , B_Prompt_Dual("Dual Prompt 1.1.2")
+                        , B_Prompt_Range("Range Prompt 1.1.3", "male", "female", 50)
+                    ])
+                ])
+                , B_UI_Container_Column(scale = 1, children = [
+                    B_UI_Dropdown("Dropdown 1.2", [
+                        B_Prompt_Single("Single Prompt 1.2.1")
+                        , B_Prompt_Dual("Dual Prompt 1.2.2")
+                    ])
+                ])
             ])
         ])
     ])
