@@ -750,7 +750,7 @@ class B_UI_Dropdown(B_UI):
     def _buildColorChoicesList(postfix: str = "") -> list[B_Prompt_Single]:
         return list(map(
             lambda text: B_Prompt_Single(
-                f"{text} {postfix}"
+                text
                 , text.lower()
                 , postfix = postfix
             )

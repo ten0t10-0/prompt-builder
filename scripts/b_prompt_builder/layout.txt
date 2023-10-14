@@ -36,7 +36,7 @@ TAB Some Tagged Tab --x 1 --build_reset_button 0
 		END
 		
 		COLUMN --scale 1
-			SELECT Some Color Dropdown --v Red something, Black something
+			SELECT Some Color Dropdown --v Red, Black
 				CHOICES --type COLOR --postfix something
 			END
 
