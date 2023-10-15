@@ -1,49 +1,48 @@
 TAB Some Tab
 	ACCORDION Some Accordion
-		SINGLE Positive prompt --sp 1.3
-		
-		SINGLE Negative prompt --n 1 --pp promptA, promptB
+		SINGLE Positive prompt --pp male --sp 1.3
+		SINGLE Negative prompt --pp female --sp 1.1 --n 1
 	END
 
-	SELECT Some Dropdown --v ChoiceA
-		DUAL ChoiceA --pp promptA
-		DUAL ChoiceB --pp promptB --pn promptC
-		DUAL ChoiceC --pn promptC
-		#DUAL Commented Out Choice --pp promptA
+	SELECT Some Dropdown --v PromptA
+		SINGLE PromptA --pp promptA
+		DUAL PromptB --pp promptB --pn promptA
+		DUAL PromptC --pp promptC
+		#DUAL Commented Out Prompt --pp promptZ
 	END
 
-	#SELECT Some Dropdown With Preset Choice
-	#	DUAL ChoiceA --pp promptA
-	#	DUAL ChoiceB --pp promptB
-	#		SET Positive prompt --pp somePositivePrompt
-	#		SET Some Color Multi-select Dropdown --v Black, White
-	#		SET SomethingA - SomethingB --r 15
-	#	END
-	#END
+	SELECT Some Dropdown With Preset Choice
+		DUAL PromptE --pp promptE
+			SET Positive prompt --pp female
+			SET Negative prompt --pp male
+			SET Some Color Dropdown --v Black, White
+			SET Male - Female --r 15
+		END
+	END
 
 	SEPARATOR
 	
 	SELECT Some Dropdown With Prefix and Postfix --prefix somePrefix --postfix somePostfix
-		SINGLE ChoiceA --pp promptA
-		SINGLE ChoiceB --pp promptB
+		SINGLE PromptF --pp promptF
+		DUAL PromptG --pp promptG --pn promptF
 	END
 END
 
 TAB Some Tagged Tab --x 1 --build_reset_button 0
 	ROW
-		COLUMN --scale 2
-			RANGE SomethingA - SomethingB --a promptA --b promptB --r 35 --a_button A --b_button B
+		COLUMN --scale 1
+			EDIT Male - Female --a male --b female --r 35 --a_button Male --b_button Female
 		END
 		
-		COLUMN --scale 1
+		COLUMN --scale 2
 			SELECT Some Color Dropdown --v Red, Black
 				CHOICES --type COLOR --postfix something
 			END
 
-			SELECT Some Unsorted Dropdown --sort 0 --v Some Special Choice
-				RANGE_LINK Some Special Choice --link SomethingA - SomethingB --a promptX --b promptY
-				DUAL ChoiceB --pp promptB
-				DUAL ChoiceA --pp promptA
+			SELECT Some Unsorted Dropdown --sort 0 --v Some Edit Link
+				EDIT_LINK Some Edit Link --link Male - Female --a slim --b muscular
+				DUAL PromptI --pp promptB
+				DUAL PromptH --pp promptA
 			END
 		END
 	END

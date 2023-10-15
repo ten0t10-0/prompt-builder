@@ -1,19 +1,19 @@
 PRESET Some Full Preset
-	SET Positive prompt --v promptA
-	SET Some Dropdown --v ChoiceB, ChoiceC
-	SET Some Unsorted Dropdown --v Some Special Choice
-	SET SomethingA - SomethingB --v 50
+	SET Positive prompt --pp female
+	SET Some Dropdown --v PromptA, PromptC
+	SET Some Unsorted Dropdown --v Some Edit Link
+	SET Male - Female --r 50
 END
 
 PRESET Some Additive Preset --is_additive 1
-	SET Positive prompt --v promptA
-	SET Some Dropdown --v ChoiceB, ChoiceC
-	SET Some Unsorted Dropdown --v Some Special Choice
-	SET SomethingA - SomethingB --v 50
+	SET Positive prompt --pp female
+	SET Some Dropdown --v PromptB, PromptC
+	SET Some Unsorted Dropdown --v Some Edit Link
+	SET Male - Female --r 50
 END
 
 PRESET Some Hidden Preset --hide 1
-	SET Positive prompt --v promptA
+	SET Positive prompt --pp something
 END
 .
 
