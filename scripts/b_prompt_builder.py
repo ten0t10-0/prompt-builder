@@ -106,6 +106,7 @@ class B_Prompt(ABC):
             self.prompt_negative.value = B_Prompt.Values.Defaults.prompt
             self.emphasis_negative.value = B_Prompt.Values.Defaults.emphasis
             self.edit.value = B_Prompt.Values.Defaults.edit
+            #! not rendered in UI:
             # self.prompt_a.value = B_Prompt.Values.Defaults.prompt
             # self.prompt_b.value = B_Prompt.Values.Defaults.prompt
             # self.prefix.value = B_Prompt.Values.Defaults.prompt
@@ -118,6 +119,7 @@ class B_Prompt(ABC):
             self.prompt_negative.reset()
             self.emphasis_negative.reset()
             self.edit.reset()
+            #! not rendered in UI:
             # self.prompt_a.reset()
             # self.prompt_b.reset()
             # self.prefix.reset()
@@ -1694,14 +1696,6 @@ class Script(scripts.Script):
             , prompt_negative: str
             , *outputValues
         ):
-        # i = 0
-        
-        # for preset in self.bUiMap.presets:
-        #     i += preset.consumeOutputs(*outputValues[i:])
-        
-        # for x in self.bUiMap.layout:
-        #     i += x.consumeOutputs(*outputValues[i:])
-        #     x.handlePrompt(p, self.bUiMap.map)
 
         p.prompt = prompt
         p.negative_prompt = prompt_negative
