@@ -82,10 +82,16 @@ class B_Prompt(ABC):
                 , prefix: str = Defaults.prompt
                 , postfix: str = Defaults.prompt
             ):
+            self.name_visible = True
+
+            self.prompt_visible = prompt_enable
             self.prompt_enable = prompt_enable
-            self.negative_enable = negative_enable
+
+            self.prompt_negative_visible = prompt_negative_enable
             self.prompt_negative_enable = prompt_negative_enable
-            self.prompt_edit_enable = prompt_edit_enable
+            
+            self.negative_visible = negative_enable
+            self.prompt_edit_visible = prompt_edit_enable
 
             self.prompt = B_Value(prompt)
             self.emphasis = B_Value(emphasis)
@@ -659,14 +665,15 @@ class B_UI_Prompt(B_UI):
         
         self.gr_container = gr.Column(variant = "panel", visible = visible)
         with self.gr_container:
-            self.gr_markdown = gr.Markdown(value = name)
+            self.gr_markdown = gr.Markdown(value = name, visible = values.name_visible)
 
-            self.gr_prompt_container = gr.Row(visible = values.prompt_enable)
+            self.gr_prompt_container = gr.Row(visible = values.prompt_visible)
             with self.gr_prompt_container:
                 self.gr_prompt = gr.Textbox(
                     label = "Prompt"
                     , value = values.prompt.value
                     , scale = B_UI_Prompt._prompt_scale
+                    , interactive = values.prompt_enable
                 )
                 self.gr_emphasis = gr.Number(
                     label = "Emphasis"
@@ -676,12 +683,13 @@ class B_UI_Prompt(B_UI):
                     , scale = B_UI_Prompt._emphasis_scale
                 )
             
-            self.gr_prompt_negative_container = gr.Row(visible = values.prompt_negative_enable)
+            self.gr_prompt_negative_container = gr.Row(visible = values.prompt_negative_visible)
             with self.gr_prompt_negative_container:
                 self.gr_prompt_negative = gr.Textbox(
                     label = "Prompt (N)"
                     , value = values.prompt_negative.value
                     , scale = B_UI_Prompt._prompt_scale
+                    , interactive = values.prompt_negative_enable
                 )
                 self.gr_emphasis_negative = gr.Number(
                     label = "Emphasis (N)"
@@ -697,13 +705,13 @@ class B_UI_Prompt(B_UI):
                 , minimum = B_Prompt.Values.Defaults.edit_min
                 , maximum = B_Prompt.Values.Defaults.edit_max
                 , step = B_Prompt.Values.Defaults.edit_step
-                , visible = values.prompt_edit_enable
+                , visible = values.prompt_edit_visible
             )
             
             self.gr_negative = gr.Checkbox(
                 label = "Negative?"
                 , value = values.negative.value
-                , visible = values.negative_enable
+                , visible = values.negative_visible
             )
 
             B_UI_Separator._build()
@@ -823,15 +831,15 @@ class B_UI_Prompt(B_UI):
 
         return [
             self.gr_container.update(visible = visible)
-            , self.gr_markdown.update(value = name)
-            , self.gr_prompt_container.update(visible = values.prompt_enable)
-            , values.prompt.value
+            , self.gr_markdown.update(value = name, visible = values.name_visible)
+            , self.gr_prompt_container.update(visible = values.prompt_visible)
+            , self.gr_prompt.update(value = values.prompt.value, interactive = values.prompt_enable)
             , values.emphasis.value
-            , self.gr_prompt_negative_container.update(visible = values.prompt_negative_enable)
-            , values.prompt_negative.value
+            , self.gr_prompt_negative_container.update(visible = values.prompt_negative_visible)
+            , self.gr_prompt_negative.update(value = values.prompt_negative.value, interactive = values.prompt_negative_enable)
             , values.emphasis_negative.value
-            , self.gr_slider.update(visible = values.prompt_edit_enable, value = values.edit.value, step = B_Prompt.Values.Defaults.edit_step)
-            , self.gr_negative.update(visible = values.negative_enable, value = values.negative.value)
+            , self.gr_slider.update(visible = values.prompt_edit_visible, value = values.edit.value, step = B_Prompt.Values.Defaults.edit_step)
+            , self.gr_negative.update(visible = values.negative_visible, value = values.negative.value)
             , self.gr_button_remove.update(interactive = enabled_button_remove)
         ]
     
@@ -1049,6 +1057,7 @@ class B_UI_Dropdown(B_UI):
         if len(item.values.postfix.value) == 0:
             item.values.postfix.reinit(self.postfix)
         
+        item.values.name_visible = False
         item.values.prompt_enable = False
         item.values.prompt_negative_enable = False
         
