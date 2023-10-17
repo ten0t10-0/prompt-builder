@@ -15,7 +15,7 @@ TAB Some Tab
 		DUAL PromptE --pp promptE
 			SET Positive prompt --pp female
 			SET Negative prompt --pp male
-			SET Some Color Dropdown --v Black, White
+			SET Some Color Dropdown --v Black something, White something
 			SET Male - Female --r 15
 		END
 	END
@@ -35,7 +35,7 @@ TAB Some Tagged Tab --x 1 --build_reset_button 0
 		END
 		
 		COLUMN --scale 2
-			SELECT Some Color Dropdown --v Red, Black
+			SELECT Some Color Dropdown --v Red something, Black something
 				CHOICES --type COLOR --postfix something
 			END
 

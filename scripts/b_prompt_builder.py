@@ -18,8 +18,8 @@ b_file_name_presets = "presets.txt"
 b_tagged_ignore = False
 b_validate_skip = False
 
-def printWarning(obj: object, name: str, message: str) -> None:
-    print(f"VALIDATE/{obj.__class__.__name__}/{name}: {message}")
+def printWarning(type: type, name: str, message: str) -> None:
+    print(f"VALIDATE/{type.__name__}/{name}: {message}")
 
 class B_Value():
     def __init__(self, value_default):
@@ -401,7 +401,7 @@ class B_Prompt_Edit_Link(B_Prompt):
     def build(self) -> tuple[str, str]:
         b_prompt_link = B_Prompt_Map.get(self.link_name)
         if b_prompt_link is None:
-            printWarning(self, f"{self.name} - build()", f"Linked prompt not found -> '{self.link_name}'")
+            printWarning(type(self), f"{self.name} - build()", f"Linked prompt not found -> '{self.link_name}'")
         
         return B_Prompt_Edit._build(
             self.values.prompt_a.value
@@ -564,7 +564,7 @@ class B_UI_Preset(B_UI):
     
     def addMapping(self, name: str, args: dict[str, str]):
         if name in self.mappings:
-            printWarning(self, f"{self.name} - addMapping()", f"Duplicate name -> '{name}'")
+            printWarning(type(self), f"{self.name} - addMapping()", f"Duplicate name -> '{name}'")
         self.mappings[name] = args
     
     def apply(self):
@@ -884,7 +884,7 @@ class B_UI_Dropdown(B_UI):
     def _buildColorChoicesList(postfix: str = "") -> list[B_Prompt_Single]:
         return list(map(
             lambda text: B_Prompt_Single(
-                text
+                f"{text} {postfix}"
                 , text.lower()
                 , postfix = postfix
             )
@@ -1286,7 +1286,7 @@ class B_Prompt_Map():
     @staticmethod
     def add(b_prompt: B_Prompt):
         if b_prompt.name in B_Prompt_Map._map:
-            printWarning("B_Prompt_Map", "add()", f"Duplicate name -> '{b_prompt.name}'")
+            printWarning(B_Prompt_Map, "add()", f"Duplicate name -> '{b_prompt.name}'")
         B_Prompt_Map._map[b_prompt.name] = b_prompt, False
     
     @staticmethod
@@ -1325,7 +1325,7 @@ class B_UI_Map():
     @staticmethod
     def add(b_ui: B_UI):
         if b_ui.name in B_UI_Map._map:
-            printWarning("B_UI_Map", "add()", f"Duplicate name -> '{b_ui.name}'")
+            printWarning(B_UI_Map, "add()", f"Duplicate name -> '{b_ui.name}'")
         B_UI_Map._map[b_ui.name] = b_ui
     
     @staticmethod
@@ -1560,7 +1560,7 @@ class B_UI_Master():
                         _build(B_UI_Separator._fromArgs(l_args))
 
                     case _:
-                        printWarning(self, "parseLayout()", f"Invalid layout type -> '{l_type}'")
+                        printWarning(type(self), "parseLayout()", f"Invalid layout type -> '{l_type}'")
         
         return layout
     
@@ -1600,7 +1600,7 @@ class B_UI_Master():
                         preset_current.addMapping(l_name, l_args)
                     
                     case _:
-                        printWarning(self, "parsePresets()", f"Invalid preset type -> '{l_type}'")
+                        printWarning(type(self), "parsePresets()", f"Invalid preset type -> '{l_type}'")
         
         return presets
     
