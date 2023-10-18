@@ -7,7 +7,7 @@ END
 
 PRESET Some Additive Preset --is_additive 1
 	SET Positive prompt --pp female
-	SET Some Dropdown --v PromptB, PromptC
+	SET Some Dropdown --v PromptB::sn 1.1, PromptC
 	SET Some Unsorted Dropdown --v Some Edit Link
 	SET Male - Female --r 50
 END

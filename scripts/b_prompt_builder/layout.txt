@@ -4,7 +4,7 @@ TAB Some Tab
 		SINGLE Negative prompt --pp female --sp 1.1 --n 1
 	END
 
-	SELECT Some Dropdown --v PromptA
+	SELECT Some Dropdown --v PromptA::sp 1.2
 		SINGLE PromptA --pp promptA
 		DUAL PromptB --pp promptB --pn promptA
 		DUAL PromptC --pp promptC
