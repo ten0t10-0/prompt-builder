@@ -894,7 +894,7 @@ class B_UI_Prompt(B_UI):
 
 class B_UI_Dropdown(B_UI):
     _choice_empty: str = "-"
-    _ui_dropdown_scale: int = 20
+    _ui_dropdown_scale: int = 30
     _ui_remove_scale: int = 1
     _ui_remove_width: int = 60
 
@@ -906,6 +906,7 @@ class B_UI_Dropdown(B_UI):
             , B_UI_Dropdown._fromArgsValue(args)
             , args.get(B_Prompt.Values.Keys.prefix, B_Prompt.Values.Defaults.prompt)
             , args.get(B_Prompt.Values.Keys.postfix, B_Prompt.Values.Defaults.prompt)
+            , int(args.get("scale", 0))
         )
     
     @staticmethod
@@ -965,6 +966,7 @@ class B_UI_Dropdown(B_UI):
             , b_prompts_applied_default: dict[str, dict[str, str]] = None
             , prefix = B_Prompt.Values.Defaults.prompt
             , postfix = B_Prompt.Values.Defaults.prompt
+            , scale: int = 1
             , b_prompts: list[B_Prompt] = None
         ):
         super().__init__(name)
@@ -974,6 +976,7 @@ class B_UI_Dropdown(B_UI):
         self.b_prompts_applied_default = b_prompts_applied_default if b_prompts_applied_default is not None else {}
         self.prefix = prefix
         self.postfix = postfix
+        self.scale = scale if scale > 0 else 1
 
         self.choice_list: list[B_Prompt] = []
         if b_prompts is not None:
@@ -1007,25 +1010,26 @@ class B_UI_Dropdown(B_UI):
     
     def build(self) -> None:
         # Self
-        with gr.Row():
-            self.gr_dropdown = gr.Dropdown(
-                label = self.name
-                , choices = [self._choice_empty] + list(map(lambda b_prompt: b_prompt.name, self.choice_list))
-                , multiselect = False
-                , value = self.choice.value
-                , allow_custom_value = False
-                , scale = self._ui_dropdown_scale
-            )
+        with gr.Column(scale = self.scale):
+            with gr.Row():
+                self.gr_dropdown = gr.Dropdown(
+                    label = self.name
+                    , choices = [self._choice_empty] + list(map(lambda b_prompt: b_prompt.name, self.choice_list))
+                    , multiselect = False
+                    , value = self.choice.value
+                    , allow_custom_value = False
+                    , scale = self._ui_dropdown_scale
+                )
 
-            self.gr_remove = gr.Button(
-                value = "x"
-                , scale = self._ui_remove_scale
-                , size = "sm"
-                , min_width = self._ui_remove_width
-            )
+                self.gr_remove = gr.Button(
+                    value = "x"
+                    , scale = self._ui_remove_scale
+                    , size = "sm"
+                    , min_width = self._ui_remove_width
+                )
 
-        # Prompt UI
-        self.b_prompt_ui.build()
+            # Prompt UI
+            self.b_prompt_ui.build()
 
         #! register on map
         B_UI_Map.add(self)
