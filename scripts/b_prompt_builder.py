@@ -668,6 +668,8 @@ class B_UI_Prompt(B_UI):
 
         self.gr_button_apply: typing.Any = None
         self.gr_button_remove: typing.Any = None
+        
+        self.ui_component_names_apply: list[str] = []
     
     def init(self) -> None:
         #! activate on prompt map
@@ -739,25 +741,47 @@ class B_UI_Prompt(B_UI):
                     , interactive = enabled_button_remove
                 )
         
-        #! register on map
+        #! register on ui map
         if self.b_prompt is not None:
             B_UI_Map.add(self)
     
     def bind(self, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
-        # Add/update #!!! SLOW
+        if len(self.ui_component_names_apply) == 0 and self.b_ui_preset is not None:
+            if not self.b_ui_preset.additive:
+                self.ui_component_names_apply = list(B_UI_Map._map.keys())
+            else:
+                self.ui_component_names_apply = list(self.b_ui_preset.mappings.keys())
+        self.ui_component_names_apply = list(filter(lambda k: k != self.name, self.ui_component_names_apply)) #!
+        
+        inputs: list[typing.Any] = self.getInput()
+        outputs: list[typing.Any] = self.getOutput()
+        for k in self.ui_component_names_apply:
+            inputs += B_UI_Map._map[k].getInput()
+            outputs += B_UI_Map._map[k].getOutput()
+        outputs += [gr_prompt, gr_prompt_negative]
+        
         def _fnApply(*inputValues):
-            B_UI_Map.consumeInputValues(inputValues)
+            offset = self.update(inputValues)
+            for k in self.ui_component_names_apply:
+                offset += B_UI_Map._map[k].update(inputValues[offset:])
+            
             self.apply()
-            return B_UI_Map.getOutputUpdates() + B_Prompt_Map.buildPromptUpdate()
+
+            updates: list = self.getOutputUpdate()
+            for k in self.ui_component_names_apply:
+                updates += B_UI_Map._map[k].getOutputUpdate()
+            updates += B_Prompt_Map.buildPromptUpdate()
+            
+            return updates
         applyArgs = {
             "fn": _fnApply
-            , "inputs": B_UI_Map._inputs
-            , "outputs": B_UI_Map._outputs + [gr_prompt, gr_prompt_negative]
+            , "inputs": inputs
+            , "outputs": outputs
         }
-        # self.gr_prompt.submit(**applyArgs)
-        # self.gr_emphasis.submit(**applyArgs)
-        # self.gr_prompt_negative.submit(**applyArgs)
-        # self.gr_emphasis_negative.submit(**applyArgs)
+        self.gr_prompt.submit(**applyArgs)
+        self.gr_emphasis.submit(**applyArgs)
+        self.gr_prompt_negative.submit(**applyArgs)
+        self.gr_emphasis_negative.submit(**applyArgs)
         self.gr_button_apply.click(**applyArgs)
 
         # Remove
@@ -1057,6 +1081,12 @@ class B_UI_Dropdown(B_UI):
         )
 
         # Prompt UI
+        ui_component_names_override: set[str] = set()
+        for b_ui_preset in self.choice_preset_map.values():
+            for k in b_ui_preset.mappings:
+                ui_component_names_override.add(k)
+        if len(ui_component_names_override) > 0:
+            self.b_prompt_ui.ui_component_names_apply = list(ui_component_names_override)
         self.b_prompt_ui.bind(gr_prompt, gr_prompt_negative)
     
     def getGrForWebUI(self) -> list[typing.Any]:
