@@ -28,7 +28,7 @@ TAB Some Tab
 	END
 END
 
-TAB Some Tagged Tab --x 1 --build_reset_button 0
+TAB Some Tagged Tab --x 1 --build_button_reset 0
 	ROW
 		COLUMN --scale 1
 			EDIT Male - Female --a male --b female --r 35 --a_button Male --b_button Female
