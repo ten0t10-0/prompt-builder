@@ -523,6 +523,14 @@ class B_UI(ABC):
     def getOutputUpdate(self) -> list[typing.Any]:
         pass
 
+    def updateRandom(self, currentValues: tuple) -> int:
+        offset = self.update(currentValues)
+        self.randomize()
+        return offset
+    
+    def randomize(self) -> None:
+        pass
+
     def applyPresetMapping(self, args: dict[str, str], additive: bool):
         pass
 
@@ -925,6 +933,7 @@ class B_UI_Prompt(B_UI):
 
 class B_UI_Dropdown(B_UI):
     _choice_empty: str = "-"
+    _choice_random_count_max: int = 5
     _ui_dropdown_scale: int = 30
     _ui_remove_scale: int = 1
     _ui_remove_width: int = 60
@@ -1160,6 +1169,24 @@ class B_UI_Dropdown(B_UI):
 
         return offset
     
+    def randomize(self) -> None:
+        if len(self.choice_list) > 0:
+            choices: list[str] = list(self.choice_map.keys())
+            choices_selected: list[str] = []
+            
+            c_max = len(choices)
+            if self._choice_random_count_max > 0 and self._choice_random_count_max < c_max:
+                c_max = self._choice_random_count_max
+            
+            r = random.randint(0, c_max)
+            if r > 0:
+                for c in range(r):
+                    i = random.randint(0, len(choices) - 1)
+                    choices_selected.append(choices.pop(i))
+            
+            for b_prompt in self.choice_map.values():
+                B_Prompt_Map.update(b_prompt, b_prompt.name not in choices_selected)
+    
     def getInput(self) -> list[typing.Any]:
         return [self.gr_dropdown] + self.b_prompt_ui.getInput()
     
@@ -1283,7 +1310,16 @@ class B_UI_Container(B_UI, ABC):
                 , outputs = [gr_prompt, gr_prompt_negative] + self.getOutput()
             )
         
-        #! - Randomize
+        # - Randomize
+        if self.build_button_random:
+            def _randomize(*currentValues):
+                self.updateRandom(currentValues)
+                return B_Prompt_Map.buildPromptUpdate() + self.getOutputUpdate()
+            self.gr_random.click(
+                fn = _randomize
+                , inputs = self.getInput()
+                , outputs = [gr_prompt, gr_prompt_negative] + self.getOutput()
+            )
     
     def getGrForWebUI(self) -> list[typing.Any]:
         gr_list: list[typing.Any] = []
@@ -1306,6 +1342,10 @@ class B_UI_Container(B_UI, ABC):
         for b_ui in self.children:
             offset += b_ui.update(inputValues[offset:])
         return offset
+    
+    def randomize(self) -> None:
+        for b_ui in self.children:
+            b_ui.randomize()
     
     def getInput(self) -> list[typing.Any]:
         gr_inputs: list[typing.Any] = []
