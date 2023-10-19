@@ -1657,7 +1657,7 @@ class B_UI_Master():
                             skip += 1
                             continue
 
-                        stack_containers.append(B_UI_Container_Group._fromArgs(l_args))
+                        stack_containers.append(B_UI_Container_Group._fromArgs(l_args, l_name))
                     
                     case "TAB":
                         if ignore:
@@ -1671,14 +1671,14 @@ class B_UI_Master():
                             skip += 1
                             continue
                         
-                        stack_containers.append(B_UI_Container_Row._fromArgs(l_args))
+                        stack_containers.append(B_UI_Container_Row._fromArgs(l_args, l_name))
                     
                     case "COLUMN":
                         if ignore:
                             skip += 1
                             continue
                         
-                        stack_containers.append(B_UI_Container_Column._fromArgs(l_args))
+                        stack_containers.append(B_UI_Container_Column._fromArgs(l_args, l_name))
                     
                     case "ACCORDION":
                         if ignore:
