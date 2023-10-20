@@ -558,14 +558,35 @@ class B_UI_Preset(B_UI):
         self.gr_button = gr.Button(self.name)
     
     def bind(self, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
+        b_ui_list: list[B_UI] = []
+        inputs: list[typing.Any] = []
+        outputs: list[typing.Any] = []
+        if self.additive:
+            for k in self.mappings:
+                b_ui = B_UI_Map._map[k]
+                b_ui_list.append(b_ui)
+                inputs += b_ui.getInput()
+                outputs += b_ui.getOutput()
+        else:
+            b_ui_list = list(B_UI_Map._map.values())
+            inputs = B_UI_Map._inputs
+            outputs = B_UI_Map._outputs
+
         def _apply(*inputValues):
-            B_UI_Map.consumeInputValues(inputValues)
+            offset: int = 0
+            for b_ui in b_ui_list:
+                offset += b_ui.update(inputValues[offset:])
+            
             self.apply()
-            return B_UI_Map.getOutputUpdates() + B_Prompt_Map.buildPromptUpdate()
+            
+            updates: list = []
+            for b_ui in b_ui_list:
+                updates += b_ui.getOutputUpdate()
+            return updates + B_Prompt_Map.buildPromptUpdate()
         self.gr_button.click(
             fn = _apply
-            , inputs = B_UI_Map._inputs
-            , outputs = B_UI_Map._outputs + [gr_prompt, gr_prompt_negative]
+            , inputs = inputs
+            , outputs = outputs + [gr_prompt, gr_prompt_negative]
         )
 
     def getGrForWebUI(self) -> list[typing.Any]:
@@ -1080,6 +1101,7 @@ class B_UI_Dropdown(B_UI):
                     self.gr_buttons.append(
                         gr.Button(
                             value = b_prompt.name
+                            , variant = "primary"
                             , size = "sm"
                             , visible = B_Prompt_Map.isSelected(b_prompt)
                         )
@@ -1103,7 +1125,12 @@ class B_UI_Dropdown(B_UI):
 
         # - Remove All #! confirm
         def _removeAll():
-            self.reset(True)
+            if self.b_prompt_ui.b_prompt is None:
+                self.reset(True)
+            else:
+                self.choice.value = self._choice_empty
+                self.b_prompt_ui.b_prompt = None
+                self.b_prompt_ui.b_ui_preset = None
             return self.getOutputUpdate() + B_Prompt_Map.buildPromptUpdate()
         self.gr_remove.click(
             fn = _removeAll
@@ -1131,7 +1158,7 @@ class B_UI_Dropdown(B_UI):
             self.b_prompt_ui.ui_component_names_apply = list(ui_component_names_override)
         
         self.b_prompt_ui.outputs_extra = [self.gr_buttons_container] + self.gr_buttons
-        self.b_prompt_ui.fn_updates_extra = self.getPromptButtonUpdates
+        self.b_prompt_ui.fn_updates_extra = lambda: [self.getPromptButtonContainerUpdate()] + self.getPromptButtonUpdates()
 
         self.b_prompt_ui.bind(gr_prompt, gr_prompt_negative)
     
@@ -1194,10 +1221,13 @@ class B_UI_Dropdown(B_UI):
         return [self.gr_dropdown, self.gr_buttons_container] + self.gr_buttons + self.b_prompt_ui.getOutput()
     
     def getOutputUpdate(self) -> list[typing.Any]:
-        return [self.choice.value] + self.getPromptButtonUpdates() + self.b_prompt_ui.getOutputUpdate()
+        return [self.choice.value, self.getPromptButtonContainerUpdate()] + self.getPromptButtonUpdates() + self.b_prompt_ui.getOutputUpdate()
+    
+    def getPromptButtonContainerUpdate(self):
+        return self.gr_buttons_container.update(visible = self.initButtonContainerVisible())
     
     def getPromptButtonUpdates(self) -> list:
-        updates = [self.gr_buttons_container.update(visible = self.initButtonContainerVisible())]
+        updates = []
         i: int = 0
         for b_prompt in self.choice_list:
             updates.append(self.gr_buttons[i].update(visible = B_Prompt_Map.isSelected(b_prompt)))
