@@ -1961,8 +1961,8 @@ class Script(scripts.Script):
             , *outputValues
         ):
 
-        p.prompt = prompt
-        p.negative_prompt = prompt_negative
+        p.prompt = B_Prompt.Fn.promptAdded(p.prompt, prompt)
+        p.negative_prompt = B_Prompt.Fn.promptAdded(p.negative_prompt, prompt_negative)
         
         proc = process_images(p)
         
