@@ -29,11 +29,14 @@ class B_Value():
     def buildDefaultValue(self):
         return self.value_default
     
+    def update(self, value):
+        self.value = value
+    
     def reset(self):
         self.value = self.buildDefaultValue()
     
-    def reinit(self, value: typing.Any, keep_current: bool = False):
-        self.value_default = value
+    def reinit(self, value_default, keep_current: bool = False):
+        self.value_default = value_default
         if not keep_current:
             self.reset()
 
@@ -134,32 +137,32 @@ class B_Prompt(ABC):
                 return
             
             if values_new.prompt.value is not None:
-                self.prompt.value = values_new.prompt.value
+                self.prompt.update(values_new.prompt.value)
             elif resetIfNone:
                 self.prompt.reset()
             
             if values_new.emphasis.value is not None:
-                self.emphasis.value = values_new.emphasis.value
+                self.emphasis.update(values_new.emphasis.value)
             elif resetIfNone:
                 self.emphasis.reset()
             
             if values_new.prompt_negative.value is not None:
-                self.prompt_negative.value = values_new.prompt_negative.value
+                self.prompt_negative.update(values_new.prompt_negative.value)
             elif resetIfNone:
                 self.prompt_negative.reset()
             
             if values_new.emphasis_negative.value is not None:
-                self.emphasis_negative.value = values_new.emphasis_negative.value
+                self.emphasis_negative.update(values_new.emphasis_negative.value)
             elif resetIfNone:
                 self.emphasis_negative.reset()
             
             if values_new.negative.value is not None:
-                self.negative.value = values_new.negative.value
+                self.negative.update(values_new.negative.value)
             elif resetIfNone:
                 self.negative.reset()
             
             if values_new.edit.value is not None:
-                self.edit.value = values_new.edit.value
+                self.edit.update(values_new.edit.value)
             elif resetIfNone:
                 self.edit.reset()
 
@@ -227,18 +230,18 @@ class B_Prompt(ABC):
     
     def clear(self):
         if self.meta.prompt_enable:
-            self.values.prompt.value = B_Prompt.Values.Defaults.prompt
-        self.values.emphasis.value = B_Prompt.Values.Defaults.emphasis
-        self.values.negative.value = B_Prompt.Values.Defaults.negative
+            self.values.prompt.update(B_Prompt.Values.Defaults.prompt)
+        self.values.emphasis.update(B_Prompt.Values.Defaults.emphasis)
+        self.values.negative.update(B_Prompt.Values.Defaults.negative)
         if self.meta.prompt_negative_enable:
-            self.values.prompt_negative.value = B_Prompt.Values.Defaults.prompt
-        self.values.emphasis_negative.value = B_Prompt.Values.Defaults.emphasis
-        self.values.edit.value = B_Prompt.Values.Defaults.edit
+            self.values.prompt_negative.update(B_Prompt.Values.Defaults.prompt)
+        self.values.emphasis_negative.update(B_Prompt.Values.Defaults.emphasis)
+        self.values.edit.update(B_Prompt.Values.Defaults.edit)
         #! not rendered in UI:
-        # self.values.prompt_a.value = B_Prompt.Values.Defaults.prompt
-        # self.values.prompt_b.value = B_Prompt.Values.Defaults.prompt
-        # self.values.prefix.value = B_Prompt.Values.Defaults.prompt
-        # self.values.postfix.value = B_Prompt.Values.Defaults.prompt
+        # self.values.prompt_a.update(B_Prompt.Values.Defaults.prompt)
+        # self.values.prompt_b.update(B_Prompt.Values.Defaults.prompt)
+        # self.values.prefix.update(B_Prompt.Values.Defaults.prompt)
+        # self.values.postfix.update(B_Prompt.Values.Defaults.prompt)
     
     @abstractmethod
     def build(self) -> tuple[str, str]:
@@ -676,7 +679,6 @@ class B_UI_Prompt(B_UI):
         super().__init__(name)
 
         self.b_prompt = b_prompt
-        self.b_ui_preset: B_UI_Preset = None
 
         self.gr_container: typing.Any = None
 
@@ -698,9 +700,8 @@ class B_UI_Prompt(B_UI):
         self.gr_button_apply: typing.Any = None
         self.gr_button_remove: typing.Any = None
         
-        self.ui_component_names_apply: list[str] = []
-        self.outputs_extra: list[typing.Any] = []
-        self.fn_updates_extra: typing.Callable[[], list] = None
+        self.outputs_override: list[typing.Any] = []
+        self.fn_updates_override: typing.Callable[[], list] = None
     
     def init(self) -> None:
         #! activate on prompt map
@@ -777,38 +778,22 @@ class B_UI_Prompt(B_UI):
             B_UI_Map.add(self)
     
     def bind(self, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
-        if len(self.ui_component_names_apply) == 0 and self.b_ui_preset is not None:
-            if not self.b_ui_preset.additive:
-                self.ui_component_names_apply = list(B_UI_Map._map.keys())
-            else:
-                self.ui_component_names_apply = list(self.b_ui_preset.mappings.keys())
-        self.ui_component_names_apply = list(filter(lambda k: k != self.name, self.ui_component_names_apply)) #!
+        def _fnBuildUpdates(remove: bool = False):
+            B_Prompt_Map.update(self.b_prompt, remove)
+            return (
+                [self.gr_button_remove.update(interactive = not remove)] if self.fn_updates_override is None else self.fn_updates_override()
+            ) + B_Prompt_Map.buildPromptUpdate()
         
-        inputs: list[typing.Any] = self.getInput()
-        outputs: list[typing.Any] = self.getOutput()
-        for k in self.ui_component_names_apply:
-            inputs += B_UI_Map._map[k].getInput()
-            outputs += B_UI_Map._map[k].getOutput()
-        outputs += self.outputs_extra + [gr_prompt, gr_prompt_negative]
-        
-        def _fnApply(*inputValues):
-            offset = self.update(inputValues)
-            for k in self.ui_component_names_apply:
-                offset += B_UI_Map._map[k].update(inputValues[offset:])
-            
-            self.apply()
+        outputs = (
+            [self.gr_button_remove] if len(self.outputs_override) == 0 else self.outputs_override
+        ) + [gr_prompt, gr_prompt_negative]
 
-            updates: list = self.getOutputUpdate()
-            for k in self.ui_component_names_apply:
-                updates += B_UI_Map._map[k].getOutputUpdate()
-            if self.fn_updates_extra is not None:
-                updates += self.fn_updates_extra()
-            updates += B_Prompt_Map.buildPromptUpdate()
-            
-            return updates
+        def _fnApply(*inputValues):
+            self.update(inputValues)
+            return _fnBuildUpdates()
         applyArgs = {
             "fn": _fnApply
-            , "inputs": inputs
+            , "inputs": self.getInput()
             , "outputs": outputs
         }
         self.gr_prompt.submit(**applyArgs)
@@ -819,14 +804,10 @@ class B_UI_Prompt(B_UI):
 
         # Remove
         def _fnRemove():
-            B_Prompt_Map.update(self.b_prompt, True)
-            updates = [self.gr_button_remove.update(interactive = False)] + B_Prompt_Map.buildPromptUpdate()
-            if self.fn_updates_extra is not None:
-                updates += self.fn_updates_extra()
-            return updates
+            return _fnBuildUpdates(True)
         self.gr_button_remove.click(
             fn = _fnRemove
-            , outputs = [self.gr_button_remove, gr_prompt, gr_prompt_negative] + self.outputs_extra
+            , outputs = outputs
         )
     
     def getGrForWebUI(self) -> list[typing.Any]:
@@ -871,12 +852,12 @@ class B_UI_Prompt(B_UI):
         offset += 1
 
         if self.b_prompt is not None:
-            self.b_prompt.values.prompt.value = prompt
-            self.b_prompt.values.emphasis.value = emphasis
-            self.b_prompt.values.negative.value = negative
-            self.b_prompt.values.prompt_negative.value = prompt_negative
-            self.b_prompt.values.emphasis_negative.value = emphasis_negative
-            self.b_prompt.values.edit.value = edit
+            self.b_prompt.values.prompt.update(prompt)
+            self.b_prompt.values.emphasis.update(emphasis)
+            self.b_prompt.values.negative.update(negative)
+            self.b_prompt.values.prompt_negative.update(prompt_negative)
+            self.b_prompt.values.emphasis_negative.update(emphasis_negative)
+            self.b_prompt.values.edit.update(edit)
 
         return offset
     
@@ -940,24 +921,14 @@ class B_UI_Prompt(B_UI):
                 , False
             )
     
-    def apply(self):
-        if self.b_prompt is not None:
-            B_Prompt_Map.update(self.b_prompt)
-        
-        if self.b_ui_preset is not None:
-            self.b_ui_preset.apply()
-    
     def applyPresetMapping(self, args: dict[str, str], additive: bool):
         if self.b_prompt is None:
             return
         self.b_prompt.values.updateFromArgs(args, not additive)
 
 class B_UI_Dropdown(B_UI):
-    _choice_empty: str = "-"
+    #_choice_empty: str = "-"
     _choice_random_count_max: int = 5
-    _ui_dropdown_scale: int = 30
-    _ui_remove_scale: int = 1
-    _ui_remove_width: int = 60
 
     @staticmethod
     def _fromArgs(args: dict[str, str], name: str = "Dropdown"):
@@ -1032,9 +1003,8 @@ class B_UI_Dropdown(B_UI):
         ):
         super().__init__(name)
 
-        self.choice = B_Value(B_UI_Dropdown._choice_empty)
-        self.sort_choices = sort_choices
         self.b_prompts_applied_default = b_prompts_applied_default if b_prompts_applied_default is not None else {}
+        self.sort_choices = sort_choices
         self.prefix = prefix
         self.postfix = postfix
         self.scale = scale if scale > 0 else 1
@@ -1057,13 +1027,15 @@ class B_UI_Dropdown(B_UI):
     
     def init(self) -> None:
         # Self
+        # - sort choices
         if self.sort_choices:
             self.choice_list = sorted(self.choice_list, key = lambda b_prompt: b_prompt.name)
         
+        # - build map
         for b_prompt in self.choice_list:
             self.choice_map[b_prompt.name] = b_prompt
         
-        #!
+        # - apply default choices #!
         for k in self.b_prompts_applied_default:
             b_prompt = self.choice_map[k]
             b_prompt.values.updateFromArgs(self.b_prompts_applied_default[k])
@@ -1073,28 +1045,16 @@ class B_UI_Dropdown(B_UI):
         self.b_prompt_ui.init()
     
     def build(self) -> None:
-        # Self
         with gr.Column(scale = self.scale):
-            with gr.Row():
-                self.gr_dropdown = gr.Dropdown(
-                    label = self.name
-                    , choices = [self._choice_empty] + list(map(lambda b_prompt: b_prompt.name, self.choice_list))
-                    , multiselect = False
-                    , value = self.choice.value
-                    , allow_custom_value = False
-                    , scale = self._ui_dropdown_scale
-                )
-
-                self.gr_remove = gr.Button(
-                    value = "x"
-                    , scale = self._ui_remove_scale
-                    , size = "sm"
-                    , min_width = self._ui_remove_width
-                )
-
-            # Prompt UI
-            self.b_prompt_ui.build()
-
+            # Self
+            self.gr_dropdown = gr.Dropdown(
+                label = self.name
+                , choices = list(map(lambda b_prompt: b_prompt.name, self.choice_list))
+                , multiselect = True
+                , value = list(self.b_prompts_applied_default.keys())
+                , allow_custom_value = False
+            )
+            
             self.gr_buttons_container = gr.Row(variant = "panel", visible = self.initButtonContainerVisible())
             with self.gr_buttons_container:
                 for b_prompt in self.choice_list:
@@ -1107,94 +1067,97 @@ class B_UI_Dropdown(B_UI):
                         )
                     )
 
+            # Prompt UI
+            self.b_prompt_ui.build()
+
         #! register on map
         B_UI_Map.add(self)
     
     def bind(self, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
         # Self
-        def _onSelect(choice: str):
-            self.choice.value = choice
-            self.b_prompt_ui.b_prompt = self.choice_map.get(choice)
-            self.b_prompt_ui.b_ui_preset = self.choice_preset_map.get(choice)
-            return self.b_prompt_ui.getOutputUpdate()
-        self.gr_dropdown.select(
-            fn = _onSelect
-            , inputs = self.gr_dropdown
-            , outputs = self.b_prompt_ui.getOutput()
-        )
+        b_ui_names_presets: set[str] = set()
+        for b_ui_preset in self.choice_preset_map.values():
+            for k in b_ui_preset.mappings:
+                b_ui_names_presets.add(k)
+        
+        inputs_presets: list[typing.Any] = []
+        outputs_presets: list = []
+        for k in b_ui_names_presets:
+            inputs_presets += B_UI_Map._map[k].getInput()
+            outputs_presets += B_UI_Map._map[k].getOutput()
+        
+        def _updateSelections(choices: str | list[str], *input_values_presets):
+            selected_choices: list[str] = choices if issubclass(type(choices), list) else [choices]
+            for b_prompt in self.choice_list:
+                B_Prompt_Map.update(b_prompt, b_prompt.name not in selected_choices)
 
-        # - Remove All #! confirm
-        def _removeAll():
-            if self.b_prompt_ui.b_prompt is None:
-                self.reset(True)
-            else:
-                self.choice.value = self._choice_empty
+            offset_presets: int = 0
+            for k in b_ui_names_presets:
+                offset_presets += B_UI_Map._map[k].update(input_values_presets[offset_presets:])
+            
+            for k in selected_choices:
+                preset = self.choice_preset_map.get(k)
+                if preset is not None:
+                    preset.apply()
+            
+            if not B_Prompt_Map.isSelected(self.b_prompt_ui.b_prompt):
                 self.b_prompt_ui.b_prompt = None
-                self.b_prompt_ui.b_ui_preset = None
-            return self.getOutputUpdate() + B_Prompt_Map.buildPromptUpdate()
-        self.gr_remove.click(
-            fn = _removeAll
-            , outputs = self.getOutput() + [gr_prompt, gr_prompt_negative]
+            
+            updates: list = [self.getPromptButtonContainerUpdate()] + self.getPromptButtonUpdates() + self.b_prompt_ui.getOutputUpdate()
+            for k in b_ui_names_presets:
+                updates += B_UI_Map._map[k].getOutputUpdate()
+            updates += B_Prompt_Map.buildPromptUpdate()
+            return updates
+        self.gr_dropdown.input(
+            fn = _updateSelections
+            , inputs = [self.gr_dropdown] + inputs_presets
+            , outputs = [self.gr_buttons_container] + self.gr_buttons + self.b_prompt_ui.getOutput() + outputs_presets + [gr_prompt, gr_prompt_negative]
         )
 
-        # - Update selected
+        # - Show/hide prompt ui
         if len(self.gr_buttons) > 0:
+            outputs_prompt_ui = self.b_prompt_ui.getOutput()
             def _fnSelect(k: str):
-                updates = _onSelect(k)
-                return [self.choice.value] + updates
+                if self.b_prompt_ui.b_prompt is not None and self.b_prompt_ui.b_prompt.name == k:
+                    self.b_prompt_ui.b_prompt = None
+                else:
+                    self.b_prompt_ui.b_prompt = self.choice_map.get(k)
+                return self.b_prompt_ui.getOutputUpdate()
             for gr_button in self.gr_buttons:
                 gr_button.click(
                     fn = _fnSelect
                     , inputs = gr_button
-                    , outputs = [self.gr_dropdown] + self.b_prompt_ui.getOutput()
+                    , outputs = outputs_prompt_ui
                 )
 
-        # Prompt UI
-        ui_component_names_override: set[str] = set()
-        for b_ui_preset in self.choice_preset_map.values():
-            for k in b_ui_preset.mappings:
-                ui_component_names_override.add(k)
-        if len(ui_component_names_override) > 0:
-            self.b_prompt_ui.ui_component_names_apply = list(ui_component_names_override)
-        
-        self.b_prompt_ui.outputs_extra = [self.gr_buttons_container] + self.gr_buttons
-        self.b_prompt_ui.fn_updates_extra = lambda: [self.getPromptButtonContainerUpdate()] + self.getPromptButtonUpdates()
+        # Prompt UI #!!!
+        self.b_prompt_ui.outputs_override = [self.gr_dropdown, self.gr_buttons_container] + self.gr_buttons + self.b_prompt_ui.getOutput()
+        def _fnUpdatesOverride():
+            self.b_prompt_ui.b_prompt = None #!
+            return [self.initChoicesSelected(), self.getPromptButtonContainerUpdate()] + self.getPromptButtonUpdates() + self.b_prompt_ui.getOutputUpdate()
+        self.b_prompt_ui.fn_updates_override = _fnUpdatesOverride
 
         self.b_prompt_ui.bind(gr_prompt, gr_prompt_negative)
     
     def getGrForWebUI(self) -> list[typing.Any]:
-        return [self.gr_dropdown, self.gr_remove] + self.gr_buttons + self.b_prompt_ui.getGrForWebUI()
+        return [self.gr_dropdown] + self.gr_buttons + self.b_prompt_ui.getGrForWebUI()
     
     def reset(self, clear: bool = False) -> None:
-        #!
-        if not clear:
-            self.choice.reset()
-        else:
-            self.choice.value = self._choice_empty
-
         for b_prompt in self.choice_list:
             if not clear:
                 b_prompt.reset()
-                b_prompt_value_args = self.b_prompts_applied_default.get(b_prompt.name)
-                if b_prompt_value_args is not None:
-                    b_prompt.values.updateFromArgs(b_prompt_value_args, True)
-                B_Prompt_Map.update(b_prompt, b_prompt_value_args is None)
+                b_prompt_args = self.b_prompts_applied_default.get(b_prompt.name)
+                if b_prompt_args is not None:
+                    b_prompt.values.updateFromArgs(b_prompt_args, True)
+                B_Prompt_Map.update(b_prompt, b_prompt_args is None)
             else:
                 b_prompt.clear()
                 B_Prompt_Map.update(b_prompt, True)
         
         self.b_prompt_ui.b_prompt = None
-        self.b_prompt_ui.b_ui_preset = None
     
     def update(self, inputValues: tuple) -> int:
-        offset: int = 0
-
-        self.choice.value = str(inputValues[offset])
-        offset += 1
-
-        offset += self.b_prompt_ui.update(inputValues[offset:])
-
-        return offset
+        return self.b_prompt_ui.update(inputValues)
     
     def randomize(self) -> None:
         if len(self.choice_list) > 0:
@@ -1215,13 +1178,13 @@ class B_UI_Dropdown(B_UI):
                 B_Prompt_Map.update(b_prompt, b_prompt.name not in choices_selected)
     
     def getInput(self) -> list[typing.Any]:
-        return [self.gr_dropdown] + self.b_prompt_ui.getInput()
+        return self.b_prompt_ui.getInput()
     
     def getOutput(self) -> list[typing.Any]:
         return [self.gr_dropdown, self.gr_buttons_container] + self.gr_buttons + self.b_prompt_ui.getOutput()
     
     def getOutputUpdate(self) -> list[typing.Any]:
-        return [self.choice.value, self.getPromptButtonContainerUpdate()] + self.getPromptButtonUpdates() + self.b_prompt_ui.getOutputUpdate()
+        return [self.initChoicesSelected(), self.getPromptButtonContainerUpdate()] + self.getPromptButtonUpdates() + self.b_prompt_ui.getOutputUpdate()
     
     def getPromptButtonContainerUpdate(self):
         return self.gr_buttons_container.update(visible = self.initButtonContainerVisible())
@@ -1233,6 +1196,13 @@ class B_UI_Dropdown(B_UI):
             updates.append(self.gr_buttons[i].update(visible = B_Prompt_Map.isSelected(b_prompt)))
             i += 1
         return updates
+    
+    def initChoicesSelected(self):
+        choices_selected: list[str] = []
+        for b_prompt in self.choice_list:
+            if B_Prompt_Map.isSelected(b_prompt):
+                choices_selected.append(b_prompt.name)
+        return choices_selected
     
     def initButtonContainerVisible(self):
         return any(map(lambda b_prompt: B_Prompt_Map.isSelected(b_prompt), self.choice_list)) #! optimize?
@@ -1274,6 +1244,7 @@ class B_UI_Dropdown(B_UI):
             for b_prompt in b_prompt_list:
                 self.addChoice(b_prompt)
     
+    #!!!
     def applyPresetMapping(self, args: dict[str, str], additive: bool):
         valueMap = B_UI_Dropdown._fromArgsValue(args)
         for b_prompt in self.choice_map.values():
@@ -1880,8 +1851,8 @@ class B_UI_Master():
         def _fnApply(*inputValues):
             B_UI_Map.consumeInputValues(inputValues)
             for b_ui in B_UI_Map._map.values():
-                if type(b_ui) is B_UI_Prompt:
-                    b_ui.apply()
+                if type(b_ui) is B_UI_Prompt and b_ui.b_prompt is not None:
+                    B_Prompt_Map.update(b_ui.b_prompt)
             return B_UI_Map.getOutputUpdates() + B_Prompt_Map.buildPromptUpdate()
         self.gr_apply.click(
             fn = _fnApply
@@ -1894,7 +1865,7 @@ class B_UI_Master():
             B_UI_Map.consumeInputValues(inputValues)
             for b_prompt, selected in B_Prompt_Map._map.values():
                 B_Prompt_Map.update(b_prompt, True)
-            return B_UI_Map.getOutputUpdates()+ B_Prompt_Map.buildPromptUpdate()
+            return B_UI_Map.getOutputUpdates() + B_Prompt_Map.buildPromptUpdate()
         self.gr_remove.click(
             fn = _fnRemove
             , inputs = inputs
