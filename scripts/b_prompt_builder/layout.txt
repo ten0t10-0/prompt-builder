@@ -1,64 +1,48 @@
-GROUP All --build_reset_button 1 --build_random_button 1
-	TAB Some Tab
-		ACCORDION Some Accordion
-			TEXTBOX Positive prompt
-			
-			TEXTBOX Negative prompt --is_negative 1 --v promptA, promptB
-		END
+TAB Some Tab
+	ACCORDION Some Accordion
+		SINGLE Positive prompt --pp male --sp 1.3
+		SINGLE Negative prompt --pp female --sp 1.1 --n 1
+	END
 
-		DROPDOWN Some Dropdown --v ChoiceA, ChoiceB --multi_select 1
-			CHOICE ChoiceA --p promptA
-			CHOICE ChoiceB --p promptB --n promptC
-			CHOICE ChoiceC --n promptC
-			#CHOICE Commented Out Choice --p promptA
-			CHOICE ChoiceD --p promptD
-				SET Positive prompt --v somePositivePrompt
-				SET Some Color Multi-select Dropdown --v Black, White
-				SET SomethingA - SomethingB --v 15
-			END
-		END
+	SELECT Some Dropdown --v PromptA::sp 1.2
+		SINGLE PromptA --pp promptA
+		DUAL PromptB --pp promptB --pn promptA
+		DUAL PromptC --pp promptC
+		#DUAL Commented Out Prompt --pp promptZ
+	END
 
-		DROPDOWN Some Simple Dropdown --simple 1
-			CHOICE ChoiceA --p promptA
-			CHOICE ChoiceB --p promptB --n promptC
-		END
-
-		DROPDOWN Some Dropdown With Preset Choice --multi_select 1
-			CHOICE ChoiceA --p promptA
-			CHOICE ChoiceB --p promptB
-				SET Positive prompt --v somePositivePrompt
-				SET Some Color Multi-select Dropdown --v Black, White
-				SET SomethingA - SomethingB --v 15
-			END
-		END
-		
-		DROPDOWN Some Dropdown With Prefix and Postfix --prefix somePrefix --postfix somePostfix
-			CHOICE ChoiceA --p promptA
-			CHOICE ChoiceB --n promptA
+	SELECT Some Dropdown With Preset Choice
+		DUAL PromptE --pp promptE
+			SET Positive prompt --pp female
+			SET Negative prompt --pp male
+			SET Some Color Dropdown --v Black something, White something
+			SET Male - Female --r 15
 		END
 	END
 
-	TAB Some Tagged Tab --x 1 --build_reset_button 0
-		ROW
-			COLUMN --scale 2
-				SLIDER SomethingA - SomethingB --a promptA --b promptB --v 0 --is_required 0 --a_button A --b_button B
+	SEPARATOR
+	
+	SELECT Some Dropdown With Prefix and Postfix --prefix somePrefix --postfix somePostfix
+		SINGLE PromptF --pp promptF
+		DUAL PromptG --pp promptG --pn promptF
+	END
+END
 
-				SLIDER SomethingA - SomethingB (Required) --a promptA --b promptB --v 100 --is_required 1 --build_buttons 0
+TAB Some Tagged Tab --x 1 --build_button_reset 0
+	ROW
+		COLUMN --scale 1
+			EDIT Male - Female --a male --b female --r 35 --a_button Male --b_button Female
+		END
+		
+		COLUMN --scale 2
+			SELECT Some Color Dropdown --v Red something, Black something
+				CHOICES --type COLOR --postfix something
 			END
-			
-			COLUMN --scale 1
-				DROPDOWN Some Color Dropdown --simple 1
-					CHOICES --type COLOR --postfix something
-				END
 
-				DROPDOWN Some Color Multi-select Dropdown --multi_select 1 --simple 1
-					CHOICES --type COLOR --postfix something
-				END
-
-				DROPDOWN Some Unsorted Dropdown --multi_select 1 --sort 0
-					CHOICE Some Special Choice --link_type SLIDER --link_target SomethingA - SomethingB --a promptX --b promptY
-					CHOICE ChoiceA --p promptA
-				END
+			SELECT Some Unsorted Dropdown --sort 0 --v Some Edit Link
+				EDIT_LINK Some Edit Link --link Male - Female --a slim --b muscular
+				DUAL PromptI --pp promptB
+				DUAL PromptH --pp promptA
 			END
 		END
 	END
