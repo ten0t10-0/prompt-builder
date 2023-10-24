@@ -7,7 +7,7 @@ import json
 
 from abc import ABC, abstractmethod
 from modules import scripts
-from modules.processing import StableDiffusionProcessing, process_images
+from modules.processing import process_images
 
 b_path_base = scripts.basedir()
 b_file_name_config = "ui-config.json"
@@ -103,6 +103,13 @@ class B_Prompt(ABC):
                 , emphasis_negative = float(emphasis_negative) if emphasis_negative is not None else None
                 , edit = int(edit) if edit is not None else None
             )
+        
+        @staticmethod
+        def _updateOrResetValue(b_value: B_Value, b_value_new: B_Value, resetIfNone: bool):
+            if b_value_new.value is not None:
+                b_value.update(b_value_new.value)
+            elif resetIfNone:
+                b_value.reset()
 
         def __init__(
                 self
@@ -136,43 +143,20 @@ class B_Prompt(ABC):
             if values_new is None:
                 return
             
-            if values_new.prompt.value is not None:
-                self.prompt.update(values_new.prompt.value)
-            elif resetIfNone:
-                self.prompt.reset()
-            
-            if values_new.emphasis.value is not None:
-                self.emphasis.update(values_new.emphasis.value)
-            elif resetIfNone:
-                self.emphasis.reset()
-            
-            if values_new.prompt_negative.value is not None:
-                self.prompt_negative.update(values_new.prompt_negative.value)
-            elif resetIfNone:
-                self.prompt_negative.reset()
-            
-            if values_new.emphasis_negative.value is not None:
-                self.emphasis_negative.update(values_new.emphasis_negative.value)
-            elif resetIfNone:
-                self.emphasis_negative.reset()
-            
-            if values_new.negative.value is not None:
-                self.negative.update(values_new.negative.value)
-            elif resetIfNone:
-                self.negative.reset()
-            
-            if values_new.edit.value is not None:
-                self.edit.update(values_new.edit.value)
-            elif resetIfNone:
-                self.edit.reset()
+            self._updateOrResetValue(self.prompt, values_new.prompt, resetIfNone)
+            self._updateOrResetValue(self.emphasis, values_new.emphasis, resetIfNone)
+            self._updateOrResetValue(self.prompt_negative, values_new.prompt_negative, resetIfNone)
+            self._updateOrResetValue(self.emphasis_negative, values_new.emphasis_negative, resetIfNone)
+            self._updateOrResetValue(self.negative, values_new.negative, resetIfNone)
+            self._updateOrResetValue(self.edit, values_new.edit, resetIfNone)
 
     class Fn():
         @staticmethod
-        def promptSanitized(prompt: str) -> str:
+        def sanitized(prompt: str) -> str:
             return prompt.strip() if prompt is not None else ""
         
         @staticmethod
-        def promptAdded(promptExisting: str, promptToAdd: str) -> str:
+        def added(promptExisting: str, promptToAdd: str) -> str:
             if len(promptToAdd) > 0:
                 if len(promptExisting) > 0:
                     promptExisting += ", " + promptToAdd
@@ -182,7 +166,7 @@ class B_Prompt(ABC):
             return promptExisting
         
         @staticmethod
-        def promptDecorated(prompt: str, prefix: str = "", postfix: str = "") -> str:
+        def decorated(prompt: str, prefix: str = "", postfix: str = "") -> str:
             if len(prompt) > 0:
                 if len(prefix) > 0:
                     prompt = f"{prefix} {prompt}"
@@ -192,7 +176,7 @@ class B_Prompt(ABC):
             return prompt
         
         @staticmethod
-        def promptEmphasized(prompt: str, emphasis: float) -> str:
+        def emphasized(prompt: str, emphasis: float) -> str:
             if len(prompt) == 0 or emphasis == B_Prompt.Values.Defaults.emphasis_min:
                 return ""
             
@@ -284,11 +268,11 @@ class B_Prompt_Single(B_Prompt):
         )
     
     def build(self) -> tuple[str, str]:
-        prompt = B_Prompt.Fn.promptEmphasized(
-            B_Prompt.Fn.promptDecorated(
-                B_Prompt.Fn.promptSanitized(self.values.prompt.value)
-                , B_Prompt.Fn.promptSanitized(self.values.prefix.value)
-                , B_Prompt.Fn.promptSanitized(self.values.postfix.value)
+        prompt = B_Prompt.Fn.emphasized(
+            B_Prompt.Fn.decorated(
+                B_Prompt.Fn.sanitized(self.values.prompt.value)
+                , B_Prompt.Fn.sanitized(self.values.prefix.value)
+                , B_Prompt.Fn.sanitized(self.values.postfix.value)
             )
             , self.values.emphasis.value
         )
@@ -331,19 +315,19 @@ class B_Prompt_Dual(B_Prompt):
         )
     
     def build(self) -> tuple[str, str]:
-        prompt = B_Prompt.Fn.promptEmphasized(
-            B_Prompt.Fn.promptDecorated(
-                B_Prompt.Fn.promptSanitized(self.values.prompt.value)
-                , B_Prompt.Fn.promptSanitized(self.values.prefix.value)
-                , B_Prompt.Fn.promptSanitized(self.values.postfix.value)
+        prompt = B_Prompt.Fn.emphasized(
+            B_Prompt.Fn.decorated(
+                B_Prompt.Fn.sanitized(self.values.prompt.value)
+                , B_Prompt.Fn.sanitized(self.values.prefix.value)
+                , B_Prompt.Fn.sanitized(self.values.postfix.value)
             )
             , self.values.emphasis.value
         )
-        prompt_negative = B_Prompt.Fn.promptEmphasized(
-            B_Prompt.Fn.promptDecorated(
-                B_Prompt.Fn.promptSanitized(self.values.prompt_negative.value)
-                , B_Prompt.Fn.promptSanitized(self.values.prefix.value)
-                , B_Prompt.Fn.promptSanitized(self.values.postfix.value)
+        prompt_negative = B_Prompt.Fn.emphasized(
+            B_Prompt.Fn.decorated(
+                B_Prompt.Fn.sanitized(self.values.prompt_negative.value)
+                , B_Prompt.Fn.sanitized(self.values.prefix.value)
+                , B_Prompt.Fn.sanitized(self.values.postfix.value)
             )
             , self.values.emphasis_negative.value
         )
@@ -369,15 +353,15 @@ class B_Prompt_Edit(B_Prompt):
         , edit: int
         , negative: bool
     ) -> tuple[str, str]:
-        prompt_a = B_Prompt.Fn.promptDecorated(
-            B_Prompt.Fn.promptSanitized(prompt_a)
-            , B_Prompt.Fn.promptSanitized(prefix)
-            , B_Prompt.Fn.promptSanitized(postfix)
+        prompt_a = B_Prompt.Fn.decorated(
+            B_Prompt.Fn.sanitized(prompt_a)
+            , B_Prompt.Fn.sanitized(prefix)
+            , B_Prompt.Fn.sanitized(postfix)
         )
-        prompt_b = B_Prompt.Fn.promptDecorated(
-            B_Prompt.Fn.promptSanitized(prompt_b)
-            , B_Prompt.Fn.promptSanitized(prefix)
-            , B_Prompt.Fn.promptSanitized(postfix)
+        prompt_b = B_Prompt.Fn.decorated(
+            B_Prompt.Fn.sanitized(prompt_b)
+            , B_Prompt.Fn.sanitized(prefix)
+            , B_Prompt.Fn.sanitized(postfix)
         )
 
         value = float(edit)
@@ -463,9 +447,11 @@ class B_Prompt_Edit_Link(B_Prompt):
         self.link_name = link_name
     
     def build(self) -> tuple[str, str]:
-        b_prompt_link = B_Prompt_Map.get(self.link_name)
+        b_prompt_link = self.getLink()
+
         if b_prompt_link is None:
             printWarning(type(self), f"{self.name} - build()", f"Linked prompt not found -> '{self.link_name}'")
+            return "", "" #!
         
         return B_Prompt_Edit._build(
             self.values.prompt_a.value
@@ -476,7 +462,7 @@ class B_Prompt_Edit_Link(B_Prompt):
             , self.values.negative.value
         )
     
-    def getLink(self) -> B_Prompt_Edit:
+    def getLink(self) -> B_Prompt_Edit | None:
         return B_Prompt_Map.get(self.link_name)
 
 class B_UI(ABC):
@@ -489,7 +475,6 @@ class B_UI(ABC):
     def __init__(self, name: str):
         self.name = name
     
-    @abstractmethod
     def init(self) -> None:
         pass
 
@@ -497,34 +482,27 @@ class B_UI(ABC):
     def build(self) -> None:
         pass
 
-    @abstractmethod
     def bind(self, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
         pass
 
-    @abstractmethod
     def getGrForWebUI(self) -> list[typing.Any]:
-        pass
+        return []
 
-    @abstractmethod
     def reset(self, clear: bool = False) -> None:
         """Reset UI and values to initial values or default values if clear is True"""
         pass
 
-    @abstractmethod
     def update(self, inputValues: tuple) -> int:
-        pass
+        return 0
     
-    @abstractmethod
     def getInput(self) -> list[typing.Any]:
-        pass
+        return []
 
-    @abstractmethod
     def getOutput(self) -> list[typing.Any]:
-        pass
+        return []
 
-    @abstractmethod
-    def getOutputUpdate(self) -> list[typing.Any]:
-        pass
+    def getOutputUpdate(self) -> list:
+        return []
 
     def updateRandom(self, currentValues: tuple) -> int:
         offset = self.update(currentValues)
@@ -553,9 +531,6 @@ class B_UI_Preset(B_UI):
         self.mappings: dict[str, dict[str, str]] = {}
 
         self.gr_button: typing.Any = None
-    
-    def init(self) -> None:
-        pass
 
     def build(self) -> None:
         self.gr_button = gr.Button(self.name)
@@ -582,7 +557,7 @@ class B_UI_Preset(B_UI):
             
             self.apply()
             
-            updates: list = []
+            updates = []
             for b_ui in b_ui_list:
                 updates += b_ui.getOutputUpdate()
             return updates + B_Prompt_Map.buildPromptUpdate()
@@ -594,21 +569,6 @@ class B_UI_Preset(B_UI):
 
     def getGrForWebUI(self) -> list[typing.Any]:
         return [self.gr_button]
-    
-    def reset(self, clear: bool = False) -> None:
-        pass
-
-    def update(self, inputValues: tuple) -> int:
-        return 0
-    
-    def getInput(self) -> list[typing.Any]:
-        return []
-    
-    def getOutput(self) -> list[typing.Any]:
-        return []
-    
-    def getOutputUpdate(self) -> list[typing.Any]:
-        return []
     
     def addMapping(self, name: str, args: dict[str, str]):
         if name in self.mappings:
@@ -639,32 +599,8 @@ class B_UI_Separator(B_UI):
     def __init__(self, name: str = "Separator"):
         super().__init__(name)
     
-    def init(self) -> None:
-        pass
-    
     def build(self) -> None:
         B_UI_Separator._build()
-    
-    def bind(self, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
-        pass
-    
-    def getGrForWebUI(self) -> list[typing.Any]:
-        return []
-    
-    def reset(self, clear: bool = False) -> None:
-        pass
-
-    def update(self, inputValues: tuple) -> int:
-        return 0
-    
-    def getInput(self) -> list[typing.Any]:
-        return []
-    
-    def getOutput(self) -> list[typing.Any]:
-        return []
-    
-    def getOutputUpdate(self) -> list[typing.Any]:
-        return []
 
 class B_UI_Prompt(B_UI):
     _prompt_scale: int = 4
@@ -886,7 +822,7 @@ class B_UI_Prompt(B_UI):
             , self.gr_button_remove
         ]
     
-    def getOutputUpdate(self) -> list[typing.Any]:
+    def getOutputUpdate(self) -> list:
         meta, values, name, visible, enabled_button_remove = self.getUpdateValues()
 
         return [
@@ -1183,7 +1119,7 @@ class B_UI_Dropdown(B_UI):
     def getOutput(self) -> list[typing.Any]:
         return [self.gr_dropdown, self.gr_buttons_container] + self.gr_buttons + self.b_prompt_ui.getOutput()
     
-    def getOutputUpdate(self) -> list[typing.Any]:
+    def getOutputUpdate(self) -> list:
         return [self.initChoicesSelected(), self.getPromptButtonContainerUpdate()] + self.getPromptButtonUpdates() + self.b_prompt_ui.getOutputUpdate()
     
     def getPromptButtonContainerUpdate(self):
@@ -1332,6 +1268,7 @@ class B_UI_Container(B_UI, ABC):
         
         for b_ui in self.children:
             gr_list += b_ui.getGrForWebUI()
+        
         return gr_list
     
     def reset(self, clear: bool = False) -> None:
@@ -1360,8 +1297,8 @@ class B_UI_Container(B_UI, ABC):
             gr_outputs += b_ui.getOutput()
         return gr_outputs
     
-    def getOutputUpdate(self) -> list[typing.Any]:
-        gr_updates: list[typing.Any] = []
+    def getOutputUpdate(self) -> list:
+        gr_updates = []
         for b_ui in self.children:
             gr_updates += b_ui.getOutputUpdate()
         return gr_updates
@@ -1485,8 +1422,8 @@ class B_Prompt_Map():
                 continue
             
             b_prompt_positive, b_prompt_negative = b_prompt.build()
-            prompt = B_Prompt.Fn.promptAdded(prompt, b_prompt_positive)
-            prompt_negative = B_Prompt.Fn.promptAdded(prompt_negative, b_prompt_negative)
+            prompt = B_Prompt.Fn.added(prompt, b_prompt_positive)
+            prompt_negative = B_Prompt.Fn.added(prompt_negative, b_prompt_negative)
         
         return [prompt, prompt_negative]
 
@@ -1570,7 +1507,7 @@ class B_UI_Master():
         self.layout = (layout if layout is not None else []) + self.parseLayout()
         self.presets = self.parsePresets()
 
-        for b_ui in self.layout:
+        for b_ui in self.layout + self.presets:
             b_ui.init()
         
         #! validate
@@ -1779,8 +1716,7 @@ class B_UI_Master():
         
         return presets
     
-    def build(self) -> list[typing.Any]:
-        """Builds layout and returns Gradio elements for WebUI"""
+    def build(self):
         # PRESETS
         B_UI_Separator._build()
         with gr.Accordion("Presets", open = False):
@@ -1814,25 +1750,6 @@ class B_UI_Master():
         B_UI_Separator._build()
         with gr.Accordion("Settings", open = False):
             self.gr_clear_config = gr.Button("Clear config")
-        
-        # (Return)
-        gr_list: list[typing.Any] = [
-            self.gr_prompt
-            , self.gr_prompt_negative
-            , self.gr_apply
-            , self.gr_remove
-            , self.gr_clear
-            , self.gr_reset
-            , self.gr_clear_config
-        ]
-
-        for b_ui in self.layout:
-            gr_list += b_ui.getGrForWebUI()
-        
-        for preset in self.presets:
-            gr_list += preset.getGrForWebUI()
-        
-        return gr_list
     
     def bind(self) -> None:
         # - Presets
@@ -1908,6 +1825,25 @@ class B_UI_Master():
                 json.dump(config_new, file_config, indent = 4)
                 file_config.truncate()
         self.gr_clear_config.click(fn = _fnClearConfigFile)
+    
+    def ui(self) -> list[typing.Any]:
+        self.build()
+        self.bind()
+
+        gr_list: list[typing.Any] = [
+            self.gr_prompt
+            , self.gr_prompt_negative
+            , self.gr_apply
+            , self.gr_remove
+            , self.gr_clear
+            , self.gr_reset
+            , self.gr_clear_config
+        ]
+
+        for b_ui in self.layout + self.presets:
+            gr_list += b_ui.getGrForWebUI()
+        
+        return gr_list
 
 #: Webui script
 class Script(scripts.Script):
@@ -1917,12 +1853,10 @@ class Script(scripts.Script):
         return "B Prompt Builder"
 
     def show(self, is_img2img):
-        return not is_img2img
+        return not is_img2img #!
     
     def ui(self, is_img2img):
-        gr_list = self.b_ui_master.build()
-        self.b_ui_master.bind()
-        return gr_list
+        return self.b_ui_master.ui()
 
     def run(
             self
@@ -1932,8 +1866,8 @@ class Script(scripts.Script):
             , *outputValues
         ):
 
-        p.prompt = B_Prompt.Fn.promptAdded(p.prompt, prompt)
-        p.negative_prompt = B_Prompt.Fn.promptAdded(p.negative_prompt, prompt_negative)
+        p.prompt = B_Prompt.Fn.added(p.prompt, prompt)
+        p.negative_prompt = B_Prompt.Fn.added(p.negative_prompt, prompt_negative)
         
         proc = process_images(p)
         
