@@ -16,7 +16,7 @@ b_folder_name_script_config = "b_prompt_builder"
 b_file_name_layout = "layout.txt"
 b_file_name_presets = "presets.txt"
 b_tagged_ignore = False
-b_validate_skip = False
+b_validate_skip = False #! unused
 
 def printWarning(type: type, name: str, message: str) -> None:
     print(f"WARNING/{type.__name__}/{name}: {message}")
@@ -924,6 +924,7 @@ class B_UI_Dropdown(B_UI):
                 , "Silver"
                 , "Gold"
                 , "Tan"
+                , "Two tone"
             ]
         ))
     
@@ -1183,7 +1184,7 @@ class B_UI_Dropdown(B_UI):
     #!!!
     def applyPresetMapping(self, args: dict[str, str], additive: bool):
         valueMap = B_UI_Dropdown._fromArgsValue(args)
-        for b_prompt in self.choice_map.values():
+        for b_prompt in self.choice_list:
             b_prompt_value_args = valueMap.get(b_prompt.name)
             if b_prompt_value_args is not None:
                 b_prompt.values.updateFromArgs(b_prompt_value_args, not additive)
@@ -1824,7 +1825,11 @@ class B_UI_Master():
                 file_config.seek(0)
                 json.dump(config_new, file_config, indent = 4)
                 file_config.truncate()
-        self.gr_clear_config.click(fn = _fnClearConfigFile)
+            return self.gr_clear_config.update(interactive = False)
+        self.gr_clear_config.click(
+            fn = _fnClearConfigFile
+            , outputs = self.gr_clear_config
+        )
     
     def ui(self) -> list[typing.Any]:
         self.build()
