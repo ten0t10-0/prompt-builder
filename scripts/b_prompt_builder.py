@@ -1151,8 +1151,8 @@ class B_UI_Dropdown(B_UI):
             item.values.postfix.reinit(self.postfix)
         
         item.meta.name_visible = False
-        item.meta.prompt_enable = False
-        item.meta.prompt_negative_enable = False
+        item.meta.prompt_enable = True
+        item.meta.prompt_negative_enable = True
         
         self.choice_list.append(item)
     
@@ -1364,15 +1364,18 @@ class B_UI_Container_Accordion(B_UI_Container):
     def _fromArgs(args: dict[str, str], name: str = "Accordion"):
         return B_UI_Container_Accordion(
             name
+            , bool(int(args.get("open", 0)))
             , bool(int(args.get("build_button_reset", 0)))
             , bool(int(args.get("build_button_random", 0)))
         )
     
-    def __init__(self, name: str = "Accordion", build_button_reset: bool = False, build_button_random: bool = False, children: list[B_UI] = None):
+    def __init__(self, name: str = "Accordion", init_open: bool = False, build_button_reset: bool = False, build_button_random: bool = False, children: list[B_UI] = None):
         super().__init__(name, build_button_reset, build_button_random, children)
+
+        self.init_open = init_open
     
     def buildContainer(self) -> typing.Any:
-        return gr.Accordion(self.name)
+        return gr.Accordion(label = self.name, open = self.init_open)
 
 class B_UI_Container_Group(B_UI_Container):
     @staticmethod
