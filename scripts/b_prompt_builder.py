@@ -594,7 +594,7 @@ class B_UI_Separator(B_UI):
     
     @staticmethod
     def _build() -> typing.Any:
-        return gr.Markdown(value = "<hr style=\"margin: 0.5em 0; border-style: dotted; border-color: var(--border-color-primary);\" />")
+        return gr.Markdown(value = "<hr style=\"margin: 0.5em 0 !important; border-style: dotted; border-color: var(--border-color-primary);\" />")
     
     def __init__(self, name: str = "Separator"):
         super().__init__(name)
