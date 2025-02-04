@@ -17,6 +17,7 @@ b_file_name_layout = "layout.txt"
 b_file_name_presets = "presets.txt"
 b_tagged_ignore = False
 b_validate_skip = False #! unused
+break_prompt = "BREAK"
 
 def printWarning(type: type, name: str, message: str) -> None:
     print(f"WARNING/{type.__name__}/{name}: {message}")
@@ -1522,6 +1523,8 @@ class B_UI_Master():
         self.gr_remove: typing.Any = None
         self.gr_clear: typing.Any = None
         self.gr_reset: typing.Any = None
+        self.gr_prepend_prompts: typing.Any = None
+        self.gr_use_break: typing.Any = None
         self.gr_clear_config: typing.Any
     
     def parseLayout(self) -> list[B_UI]:
@@ -1753,6 +1756,9 @@ class B_UI_Master():
         # EXTRAS
         B_UI_Separator._build()
         with gr.Accordion("Settings", open = False):
+            self.gr_prepend_prompts = gr.Checkbox(label = "Prepend prompts?")
+            self.gr_use_break = gr.Checkbox(label = "Use BREAK?")
+            B_UI_Separator._build()
             self.gr_clear_config = gr.Button("Clear config")
     
     def bind(self) -> None:
@@ -1841,6 +1847,8 @@ class B_UI_Master():
         gr_list: list[typing.Any] = [
             self.gr_prompt
             , self.gr_prompt_negative
+            , self.gr_prepend_prompts
+            , self.gr_use_break
             , self.gr_apply
             , self.gr_remove
             , self.gr_clear
@@ -1871,11 +1879,20 @@ class Script(scripts.Script):
             , p
             , prompt: str
             , prompt_negative: str
+            , prepend: bool
+            , use_break: bool
             , *outputValues
         ):
 
-        p.prompt = B_Prompt.Fn.added(p.prompt, prompt)
-        p.negative_prompt = B_Prompt.Fn.added(p.negative_prompt, prompt_negative)
+        prompt_a, prompt_b, prompt_negative_a, prompt_negative_b = p.prompt, prompt, p.negative_prompt, prompt_negative
+        if prepend:
+            prompt_a, prompt_b, prompt_negative_a, prompt_negative_b = prompt_b, prompt_a, prompt_negative_b, prompt_negative_a
+        
+        if use_break:
+            prompt_a = B_Prompt.Fn.added(prompt_a, break_prompt)
+
+        p.prompt = B_Prompt.Fn.added(prompt_a, prompt_b)
+        p.negative_prompt = B_Prompt.Fn.added(prompt_negative_a, prompt_negative_b)
         
         proc = process_images(p)
         
