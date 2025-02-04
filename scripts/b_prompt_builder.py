@@ -18,6 +18,7 @@ b_file_name_presets = "presets.txt"
 b_tagged_ignore = False
 b_validate_skip = False #! unused
 break_prompt = "BREAK"
+is_gradio_3 = False #! improve implementation
 
 def printWarning(type: type, name: str, message: str) -> None:
     print(f"WARNING/{type.__name__}/{name}: {message}")
@@ -716,9 +717,13 @@ class B_UI_Prompt(B_UI):
     
     def bind(self, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
         def _fnBuildUpdates(remove: bool = False):
+            gr_button_remove_update = gr.Button
+            if is_gradio_3:
+                gr_button_remove_update = self.gr_button_remove.update
+            
             B_Prompt_Map.update(self.b_prompt, remove)
             return (
-                [gr.Button(interactive = not remove)] if self.fn_updates_override is None else self.fn_updates_override()
+                [gr_button_remove_update(interactive = not remove)] if self.fn_updates_override is None else self.fn_updates_override()
             ) + B_Prompt_Map.buildPromptUpdate()
         
         outputs = (
@@ -824,20 +829,40 @@ class B_UI_Prompt(B_UI):
         ]
     
     def getOutputUpdate(self) -> list:
+        gr_container_update = gr.Column
+        gr_markdown_update = gr.Markdown
+        gr_prompt_container_update = gr.Row
+        gr_prompt_update = gr.Textbox
+        gr_prompt_negative_container_update = gr.Row
+        gr_prompt_negative_update = gr.Textbox
+        gr_slider_update = gr.Slider
+        gr_negative_update = gr.Checkbox
+        gr_button_remove_update = gr.Button
+        if is_gradio_3:
+            gr_container_update = self.gr_container.update
+            gr_markdown_update = self.gr_markdown.update
+            gr_prompt_container_update = self.gr_prompt_container.update
+            gr_prompt_update = self.gr_prompt.update
+            gr_prompt_negative_container_update = self.gr_prompt_negative_container.update
+            gr_prompt_negative_update = self.gr_prompt_negative.update
+            gr_slider_update = self.gr_slider.update
+            gr_negative_update = self.gr_negative.update
+            gr_button_remove_update = self.gr_button_remove.update
+        
         meta, values, name, visible, enabled_button_remove = self.getUpdateValues()
 
         return [
-            gr.Column(visible = visible)
-            , gr.Markdown(value = name, visible = meta.name_visible)
-            , gr.Row(visible = meta.prompt_visible)
-            , gr.Textbox(value = values.prompt.value, interactive = meta.prompt_enable)
+            gr_container_update(visible = visible)
+            , gr_markdown_update(value = name, visible = meta.name_visible)
+            , gr_prompt_container_update(visible = meta.prompt_visible)
+            , gr_prompt_update(value = values.prompt.value, interactive = meta.prompt_enable)
             , values.emphasis.value
-            , gr.Row(visible = meta.prompt_negative_visible)
-            , gr.Textbox(value = values.prompt_negative.value, interactive = meta.prompt_negative_enable)
+            , gr_prompt_negative_container_update(visible = meta.prompt_negative_visible)
+            , gr_prompt_negative_update(value = values.prompt_negative.value, interactive = meta.prompt_negative_enable)
             , values.emphasis_negative.value
-            , gr.Slider(visible = meta.prompt_edit_visible, value = values.edit.value, step = B_Prompt.Values.Defaults.edit_step)
-            , gr.Checkbox(visible = meta.negative_visible, value = values.negative.value)
-            , gr.Button(interactive = enabled_button_remove)
+            , gr_slider_update(visible = meta.prompt_edit_visible, value = values.edit.value, step = B_Prompt.Values.Defaults.edit_step)
+            , gr_negative_update(visible = meta.negative_visible, value = values.negative.value)
+            , gr_button_remove_update(interactive = enabled_button_remove)
         ]
     
     def getUpdateValues(self) -> tuple[B_Prompt.Meta, B_Prompt.Values, str, bool, bool]:
@@ -1126,13 +1151,21 @@ class B_UI_Dropdown(B_UI):
         return [self.initChoicesSelected(), self.getPromptButtonContainerUpdate()] + self.getPromptButtonUpdates() + self.b_prompt_ui.getOutputUpdate()
     
     def getPromptButtonContainerUpdate(self):
-        return gr.Row(visible = self.initButtonContainerVisible())
+        gr_buttons_container_update = gr.Row
+        if is_gradio_3:
+            gr_buttons_container_update = self.gr_buttons_container.update
+        
+        return gr_buttons_container_update(visible = self.initButtonContainerVisible())
     
     def getPromptButtonUpdates(self) -> list:
         updates = []
         i: int = 0
         for b_prompt in self.choice_list:
-            updates.append(gr.Button(visible = B_Prompt_Map.isSelected(b_prompt)))
+            gr_button_update = gr.Button
+            if is_gradio_3:
+                gr_button_update = self.gr_buttons[i].update
+            
+            updates.append(gr_button_update(visible = B_Prompt_Map.isSelected(b_prompt)))
             i += 1
         return updates
     
@@ -1822,6 +1855,10 @@ class B_UI_Master():
         
         #! Would be better if the original config file dump function is used somehow:
         def _fnClearConfigFile():
+            gr_clear_config_update = gr.Button
+            if is_gradio_3:
+                gr_clear_config_update = self.gr_clear_config.update
+            
             path = os.path.join(b_path_base, b_file_name_config)
             with open(path, "r+", encoding = "utf-8") as file_config:
                 config: dict[str, typing.Any] = json.load(file_config)
@@ -1835,7 +1872,7 @@ class B_UI_Master():
                 file_config.seek(0)
                 json.dump(config_new, file_config, indent = 4)
                 file_config.truncate()
-            return gr.Button(interactive = False)
+            return gr_clear_config_update(interactive = False)
         self.gr_clear_config.click(
             fn = _fnClearConfigFile
             , outputs = self.gr_clear_config
