@@ -926,6 +926,7 @@ class B_UI_Dropdown(B_UI):
                 , "Gold"
                 , "Tan"
                 , "Two tone"
+                , "Two-tone"
             ]
         ))
     
