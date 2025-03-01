@@ -18,7 +18,7 @@ b_file_name_presets = "presets.txt"
 b_tagged_ignore = False
 b_validate_skip = False #! unused
 break_prompt = "BREAK"
-is_gradio_3 = False #! improve implementation
+is_gradio_3 = True #! improve implementation
 show_presets = False
 
 def printGeneral(message: str) -> None:
