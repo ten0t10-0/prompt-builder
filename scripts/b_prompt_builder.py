@@ -19,6 +19,7 @@ b_tagged_ignore = False
 b_validate_skip = False #! unused
 break_prompt = "BREAK"
 is_gradio_3 = False #! improve implementation
+show_presets = False
 
 def printWarning(type: type, name: str, message: str) -> None:
     print(f"WARNING/{type.__name__}/{name}: {message}")
@@ -1544,7 +1545,7 @@ class B_UI_Master():
         self.path_presets = os.path.join(self.path_script_config, b_file_name_presets)
 
         self.layout = (layout if layout is not None else []) + self.parseLayout()
-        self.presets = self.parsePresets()
+        self.presets = self.parsePresets() if show_presets else []
 
         for b_ui in self.layout + self.presets:
             b_ui.init()
@@ -1759,14 +1760,15 @@ class B_UI_Master():
     
     def build(self):
         # PRESETS
-        B_UI_Separator._build()
-        with gr.Accordion("Presets", open = False):
-            i = 0
-            for preset in self.presets:
-                preset.build()
-                i += 1
-                if i < len(self.presets):
-                    B_UI_Separator._build()
+        if show_presets:
+            B_UI_Separator._build()
+            with gr.Accordion("Presets", open = False):
+                i = 0
+                for preset in self.presets:
+                    preset.build()
+                    i += 1
+                    if i < len(self.presets):
+                        B_UI_Separator._build()
         
         # LAYOUT
         B_UI_Separator._build()
