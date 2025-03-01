@@ -1862,7 +1862,7 @@ class B_UI_Master():
                 gr_clear_config_update = self.gr_clear_config.update
             
             path = os.path.join(b_path_base, b_file_name_config)
-            with open(path, "r+", encoding = "utf-8") as file_config:
+            with open(path, "r+", encoding = "utf8") as file_config:
                 config: dict[str, typing.Any] = json.load(file_config)
                 
                 config_keys = filter(lambda k: k.find(b_folder_name_script_config) == -1, config.keys())
@@ -1872,7 +1872,7 @@ class B_UI_Master():
                     config_new[k] = config[k]
                 
                 file_config.seek(0)
-                json.dump(config_new, file_config, indent = 4)
+                json.dump(config_new, file_config, indent = 4, ensure_ascii = False)
                 file_config.truncate()
             return gr_clear_config_update(interactive = False)
         self.gr_clear_config.click(
