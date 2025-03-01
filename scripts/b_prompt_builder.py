@@ -21,8 +21,11 @@ break_prompt = "BREAK"
 is_gradio_3 = False #! improve implementation
 show_presets = False
 
+def printGeneral(message: str) -> None:
+    print(f"* B Prompt builder: {message}")
+
 def printWarning(type: type, name: str, message: str) -> None:
-    print(f"WARNING/{type.__name__}/{name}: {message}")
+    printGeneral(f"WARNING/{type.__name__}/{name}: {message}")
 
 class B_Value():
     def __init__(self, value_default):
@@ -1592,7 +1595,7 @@ class B_UI_Master():
                 line_number += 1
 
                 if l.lstrip().startswith("#"):
-                    print(f"# LAYOUT - commented out line @{line_number}")
+                    printGeneral(f"# LAYOUT - commented out line @{line_number}")
                     continue
                 
                 l_type, l_name, l_args = self.readLine(l)
@@ -1730,7 +1733,7 @@ class B_UI_Master():
                 line_number += 1
 
                 if l.lstrip().startswith("#"):
-                    print(f"# PRESETS - commented out line @{line_number}")
+                    printGeneral(f"# PRESETS - commented out line @{line_number}")
                     continue
 
                 l_type, l_name, l_args = self.readLine(l)
