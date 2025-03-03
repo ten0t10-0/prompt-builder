@@ -15,11 +15,40 @@ b_folder_name_scripts = "scripts"
 b_folder_name_script_config = "b_prompt_builder"
 b_file_name_layout = "layout.txt"
 b_file_name_presets = "presets.txt"
+
+break_prompt = "BREAK"
+
+is_gradio_3 = True #! improve implementation
 b_tagged_ignore = False
 b_validate_skip = False #! unused
-break_prompt = "BREAK"
-is_gradio_3 = True #! improve implementation
 show_presets = False
+use_alt_color_prompt_name = True
+
+def getColorKeys() -> list[str]:
+    return [
+        "Dark"
+        , "Light"
+        , "Black"
+        , "Grey"
+        , "White"
+        , "Brown"
+        , "Blue"
+        , "Green"
+        , "Red"
+        , "Blonde"
+        , "Rainbow"
+        , "Pink"
+        , "Purple"
+        , "Orange"
+        , "Yellow"
+        , "Multicolored"
+        , "Pale"
+        , "Silver"
+        , "Gold"
+        , "Tan"
+        , "Two tone"
+        , "Two-tone"
+    ]
 
 def printGeneral(message: str) -> None:
     print(f"* B Prompt builder: {message}")
@@ -929,34 +958,11 @@ class B_UI_Dropdown(B_UI):
     def _buildColorChoicesList(postfix: str = "") -> list[B_Prompt_Single]:
         return list(map(
             lambda text: B_Prompt_Single(
-                f"{text} {postfix}"
+                f"{text} {postfix}" if not use_alt_color_prompt_name else f"{postfix.capitalize()} - {text}"
                 , text.lower()
                 , postfix = postfix
             )
-            , [
-                "Dark"
-                , "Light"
-                , "Black"
-                , "Grey"
-                , "White"
-                , "Brown"
-                , "Blue"
-                , "Green"
-                , "Red"
-                , "Blonde"
-                , "Rainbow"
-                , "Pink"
-                , "Purple"
-                , "Orange"
-                , "Yellow"
-                , "Multicolored"
-                , "Pale"
-                , "Silver"
-                , "Gold"
-                , "Tan"
-                , "Two tone"
-                , "Two-tone"
-            ]
+            , getColorKeys()
         ))
     
     def __init__(
