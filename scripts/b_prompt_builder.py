@@ -191,10 +191,10 @@ class B_Prompt(ABC):
             return prompt.strip() if prompt is not None else ""
         
         @staticmethod
-        def added(promptExisting: str, promptToAdd: str) -> str:
+        def added(promptExisting: str, promptToAdd: str, use_space: bool = False) -> str:
             if len(promptToAdd) > 0:
                 if len(promptExisting) > 0:
-                    promptExisting += ", " + promptToAdd
+                    promptExisting += (", " if not use_space else " ") + promptToAdd
                 else:
                     promptExisting = promptToAdd
             
@@ -1802,7 +1802,10 @@ class B_UI_Master():
         B_UI_Separator._build()
         with gr.Accordion("Settings", open = False):
             self.gr_prepend_prompts = gr.Checkbox(label = "Prepend prompts?")
-            self.gr_use_break = gr.Checkbox(label = "Use BREAK?")
+            self.gr_use_break = gr.Checkbox(
+                label = "Use BREAK?"
+                , value = True
+            )
             B_UI_Separator._build()
             self.gr_clear_config = gr.Button("Clear config")
     
@@ -1938,9 +1941,9 @@ class Script(scripts.Script):
             prompt_a, prompt_b, prompt_negative_a, prompt_negative_b = prompt_b, prompt_a, prompt_negative_b, prompt_negative_a
         
         if use_break:
-            prompt_a = B_Prompt.Fn.added(prompt_a, break_prompt)
+            prompt_a = B_Prompt.Fn.added(prompt_a, break_prompt, use_space=True)
 
-        p.prompt = B_Prompt.Fn.added(prompt_a, prompt_b)
+        p.prompt = B_Prompt.Fn.added(prompt_a, prompt_b, use_space=use_break)
         p.negative_prompt = B_Prompt.Fn.added(prompt_negative_a, prompt_negative_b)
         
         proc = process_images(p)
