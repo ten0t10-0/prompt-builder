@@ -1941,10 +1941,11 @@ class Script(scripts.Script):
             prompt_a, prompt_b, prompt_negative_a, prompt_negative_b = prompt_b, prompt_a, prompt_negative_b, prompt_negative_a
         
         if use_break:
-            prompt_a = B_Prompt.Fn.added(prompt_a, break_prompt, use_space=True)
+            prompt_a = B_Prompt.Fn.added(prompt_a, break_prompt, use_space=False)
+            prompt_negative_a = B_Prompt.Fn.added(prompt_negative_a, break_prompt, use_space=False)
 
-        p.prompt = B_Prompt.Fn.added(prompt_a, prompt_b, use_space=use_break)
-        p.negative_prompt = B_Prompt.Fn.added(prompt_negative_a, prompt_negative_b)
+        p.prompt = B_Prompt.Fn.added(prompt_a, prompt_b, use_space=False)
+        p.negative_prompt = B_Prompt.Fn.added(prompt_negative_a, prompt_negative_b, use_space=False)
         
         proc = process_images(p)
         
