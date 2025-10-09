@@ -1,5 +1,4 @@
 import modules.scripts as scripts
-import gradio as gr
 import os
 import typing
 import random
@@ -8,6 +7,28 @@ import json
 from abc import ABC, abstractmethod
 from modules import scripts
 from modules.processing import process_images
+
+from gradio.blocks import (
+    Block as grBlock,
+    BlockContext as grBlockContext,
+)
+from gradio.components.base import (
+    Component as grComponent,
+)
+from gradio import (
+    Accordion as grAccordion,
+    Button as grButton,
+    Checkbox as grCheckbox,
+    Column as grColumn,
+    Dropdown as grDropdown,
+    Group as grGroup,
+    Markdown as grMarkdown,
+    Number as grNumber,
+    Row as grRow,
+    Slider as grSlider,
+    Tab as grTab,
+    Textbox as grTextbox,
+)
 
 b_path_base = scripts.basedir()
 b_file_name_config = "ui-config.json"
@@ -517,10 +538,10 @@ class B_UI(ABC):
     def build(self) -> None:
         pass
 
-    def bind(self, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
+    def bind(self, gr_prompt: grTextbox, gr_prompt_negative: grTextbox) -> None:
         pass
 
-    def getGrForWebUI(self) -> list[typing.Any]:
+    def getGrForWebUI(self) -> list[grComponent]:
         return []
 
     def reset(self, clear: bool = False) -> None:
@@ -530,10 +551,10 @@ class B_UI(ABC):
     def update(self, inputValues: tuple) -> int:
         return 0
     
-    def getInput(self) -> list[typing.Any]:
+    def getInput(self) -> list[grComponent]:
         return []
 
-    def getOutput(self) -> list[typing.Any]:
+    def getOutput(self) -> list[grBlock]:
         return []
 
     def getOutputUpdate(self) -> list:
@@ -565,15 +586,15 @@ class B_UI_Preset(B_UI):
         
         self.mappings: dict[str, dict[str, str]] = {}
 
-        self.gr_button: typing.Any = None
+        self.gr_button: grButton = None
 
     def build(self) -> None:
-        self.gr_button = gr.Button(self.name)
+        self.gr_button = grButton(self.name)
     
-    def bind(self, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
+    def bind(self, gr_prompt: grTextbox, gr_prompt_negative: grTextbox) -> None:
         b_ui_list: list[B_UI] = []
-        inputs: list[typing.Any] = []
-        outputs: list[typing.Any] = []
+        inputs: list[grComponent] = []
+        outputs: list[grBlock] = []
         if self.additive:
             for k in self.mappings:
                 b_ui = B_UI_Map._map[k]
@@ -602,7 +623,7 @@ class B_UI_Preset(B_UI):
             , outputs = outputs + [gr_prompt, gr_prompt_negative]
         )
 
-    def getGrForWebUI(self) -> list[typing.Any]:
+    def getGrForWebUI(self) -> list[grComponent]:
         return [self.gr_button]
     
     def addMapping(self, name: str, args: dict[str, str]):
@@ -628,8 +649,8 @@ class B_UI_Separator(B_UI):
         return B_UI_Separator(name)
     
     @staticmethod
-    def _build() -> typing.Any:
-        return gr.Markdown(value = "<hr style=\"margin: 0.5em 0 !important; border-style: dotted; border-color: var(--border-color-primary);\" />")
+    def _build() -> grMarkdown:
+        return grMarkdown(value = "<hr style=\"margin: 0.5em 0 !important; border-style: dotted; border-color: var(--border-color-primary);\" />")
     
     def __init__(self, name: str = "Separator"):
         super().__init__(name)
@@ -651,27 +672,27 @@ class B_UI_Prompt(B_UI):
 
         self.b_prompt = b_prompt
 
-        self.gr_container: typing.Any = None
+        self.gr_container: grColumn = None
 
-        self.gr_markdown: typing.Any = None
+        self.gr_markdown: grMarkdown = None
 
-        self.gr_prompt_container: typing.Any = None
-        self.gr_prompt: typing.Any = None
-        self.gr_emphasis: typing.Any = None
+        self.gr_prompt_container: grRow = None
+        self.gr_prompt: grTextbox = None
+        self.gr_emphasis: grNumber = None
 
-        self.gr_prompt_negative_container: typing.Any = None
-        self.gr_prompt_negative: typing.Any = None
-        self.gr_emphasis_negative: typing.Any = None
+        self.gr_prompt_negative_container: grRow = None
+        self.gr_prompt_negative: grTextbox = None
+        self.gr_emphasis_negative: grNumber = None
 
         #! buttons?
-        self.gr_slider: typing.Any = None
+        self.gr_slider: grSlider = None
 
-        self.gr_negative: typing.Any = None
+        self.gr_negative: grCheckbox = None
 
-        self.gr_button_apply: typing.Any = None
-        self.gr_button_remove: typing.Any = None
+        self.gr_button_apply: grButton = None
+        self.gr_button_remove: grButton = None
         
-        self.outputs_override: list[typing.Any] = []
+        self.outputs_override: list[grBlock] = []
         self.fn_updates_override: typing.Callable[[], list] = None
     
     def init(self) -> None:
@@ -682,19 +703,19 @@ class B_UI_Prompt(B_UI):
     def build(self) -> None:
         meta, values, name, visible, enabled_button_remove = self.getUpdateValues()
         
-        self.gr_container = gr.Column(variant = "panel", visible = visible)
+        self.gr_container = grColumn(variant = "panel", visible = visible)
         with self.gr_container:
-            self.gr_markdown = gr.Markdown(value = name, visible = meta.name_visible)
+            self.gr_markdown = grMarkdown(value = name, visible = meta.name_visible)
 
-            self.gr_prompt_container = gr.Row(visible = meta.prompt_visible)
+            self.gr_prompt_container = grRow(visible = meta.prompt_visible)
             with self.gr_prompt_container:
-                self.gr_prompt = gr.Textbox(
+                self.gr_prompt = grTextbox(
                     label = "Prompt"
                     , value = values.prompt.value
                     , scale = B_UI_Prompt._prompt_scale
                     , interactive = meta.prompt_enable
                 )
-                self.gr_emphasis = gr.Number(
+                self.gr_emphasis = grNumber(
                     label = "Emphasis"
                     , value = values.emphasis.value
                     , minimum = B_Prompt.Values.Defaults.emphasis_min
@@ -702,15 +723,15 @@ class B_UI_Prompt(B_UI):
                     , scale = B_UI_Prompt._emphasis_scale
                 )
             
-            self.gr_prompt_negative_container = gr.Row(visible = meta.prompt_negative_visible)
+            self.gr_prompt_negative_container = grRow(visible = meta.prompt_negative_visible)
             with self.gr_prompt_negative_container:
-                self.gr_prompt_negative = gr.Textbox(
+                self.gr_prompt_negative = grTextbox(
                     label = "Prompt (N)"
                     , value = values.prompt_negative.value
                     , scale = B_UI_Prompt._prompt_scale
                     , interactive = meta.prompt_negative_enable
                 )
-                self.gr_emphasis_negative = gr.Number(
+                self.gr_emphasis_negative = grNumber(
                     label = "Emphasis (N)"
                     , value = values.emphasis_negative.value
                     , minimum = B_Prompt.Values.Defaults.emphasis_min
@@ -718,7 +739,7 @@ class B_UI_Prompt(B_UI):
                     , scale = B_UI_Prompt._emphasis_scale
                 )
             
-            self.gr_slider = gr.Slider(
+            self.gr_slider = grSlider(
                 label = "Edit"
                 , value = values.edit.value
                 , minimum = B_Prompt.Values.Defaults.edit_min
@@ -727,7 +748,7 @@ class B_UI_Prompt(B_UI):
                 , visible = meta.prompt_edit_visible
             )
             
-            self.gr_negative = gr.Checkbox(
+            self.gr_negative = grCheckbox(
                 label = "Negative?"
                 , value = values.negative.value
                 , visible = meta.negative_visible
@@ -735,11 +756,11 @@ class B_UI_Prompt(B_UI):
 
             B_UI_Separator._build()
 
-            with gr.Row():
-                self.gr_button_apply = gr.Button(
+            with grRow():
+                self.gr_button_apply = grButton(
                     value = "Apply"
                 )
-                self.gr_button_remove = gr.Button(
+                self.gr_button_remove = grButton(
                     value = "Remove"
                     , interactive = enabled_button_remove
                 )
@@ -748,9 +769,9 @@ class B_UI_Prompt(B_UI):
         if self.b_prompt is not None:
             B_UI_Map.add(self)
     
-    def bind(self, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
+    def bind(self, gr_prompt: grTextbox, gr_prompt_negative: grTextbox) -> None:
         def _fnBuildUpdates(remove: bool = False):
-            gr_button_remove_update = gr.Button
+            gr_button_remove_update = grButton
             if is_gradio_3:
                 gr_button_remove_update = self.gr_button_remove.update
             
@@ -785,7 +806,7 @@ class B_UI_Prompt(B_UI):
             , outputs = outputs
         )
     
-    def getGrForWebUI(self) -> list[typing.Any]:
+    def getGrForWebUI(self) -> list[grComponent]:
         return [
             self.gr_prompt
             , self.gr_emphasis
@@ -836,7 +857,7 @@ class B_UI_Prompt(B_UI):
 
         return offset
     
-    def getInput(self) -> list[typing.Any]:
+    def getInput(self) -> list[grComponent]:
         return [
             self.gr_prompt
             , self.gr_emphasis
@@ -846,7 +867,7 @@ class B_UI_Prompt(B_UI):
             , self.gr_negative
         ]
     
-    def getOutput(self) -> list[typing.Any]:
+    def getOutput(self) -> list[grBlock]:
         return [
             self.gr_container
             , self.gr_markdown
@@ -862,15 +883,15 @@ class B_UI_Prompt(B_UI):
         ]
     
     def getOutputUpdate(self) -> list:
-        gr_container_update = gr.Column
-        gr_markdown_update = gr.Markdown
-        gr_prompt_container_update = gr.Row
-        gr_prompt_update = gr.Textbox
-        gr_prompt_negative_container_update = gr.Row
-        gr_prompt_negative_update = gr.Textbox
-        gr_slider_update = gr.Slider
-        gr_negative_update = gr.Checkbox
-        gr_button_remove_update = gr.Button
+        gr_container_update = grColumn
+        gr_markdown_update = grMarkdown
+        gr_prompt_container_update = grRow
+        gr_prompt_update = grTextbox
+        gr_prompt_negative_container_update = grRow
+        gr_prompt_negative_update = grTextbox
+        gr_slider_update = grSlider
+        gr_negative_update = grCheckbox
+        gr_button_remove_update = grButton
         if is_gradio_3:
             gr_container_update = self.gr_container.update
             gr_markdown_update = self.gr_markdown.update
@@ -991,11 +1012,11 @@ class B_UI_Dropdown(B_UI):
         self.choice_map: dict[str, B_Prompt] = {}
         self.choice_preset_map: dict[str, B_UI_Preset] = {}
         
-        self.gr_dropdown: typing.Any = None
-        self.gr_remove: typing.Any = None
+        self.gr_dropdown: grDropdown = None
+        #self.gr_remove: typing.Any = None
 
-        self.gr_buttons_container: typing.Any = None
-        self.gr_buttons: list[typing.Any] = []
+        self.gr_buttons_container: grRow = None
+        self.gr_buttons: list[grButton] = []
         
         self.b_prompt_ui = B_UI_Prompt(f"{self.name} (Prompt)")
     
@@ -1019,9 +1040,9 @@ class B_UI_Dropdown(B_UI):
         self.b_prompt_ui.init()
     
     def build(self) -> None:
-        with gr.Column(scale = self.scale):
+        with grColumn(scale = self.scale):
             # Self
-            self.gr_dropdown = gr.Dropdown(
+            self.gr_dropdown = grDropdown(
                 label = self.name
                 , choices = list(map(lambda b_prompt: b_prompt.name, self.choice_list))
                 , multiselect = True
@@ -1029,11 +1050,11 @@ class B_UI_Dropdown(B_UI):
                 , allow_custom_value = False
             )
             
-            self.gr_buttons_container = gr.Row(variant = "panel", visible = self.initButtonContainerVisible())
+            self.gr_buttons_container = grRow(variant = "panel", visible = self.initButtonContainerVisible())
             with self.gr_buttons_container:
                 for b_prompt in self.choice_list:
                     self.gr_buttons.append(
-                        gr.Button(
+                        grButton(
                             value = b_prompt.name
                             , variant = "primary"
                             , size = "sm"
@@ -1047,14 +1068,14 @@ class B_UI_Dropdown(B_UI):
         #! register on map
         B_UI_Map.add(self)
     
-    def bind(self, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
+    def bind(self, gr_prompt: grTextbox, gr_prompt_negative: grTextbox) -> None:
         # Self
         b_ui_names_presets: set[str] = set()
         for b_ui_preset in self.choice_preset_map.values():
             for k in b_ui_preset.mappings:
                 b_ui_names_presets.add(k)
         
-        inputs_presets: list[typing.Any] = []
+        inputs_presets: list[grComponent] = []
         outputs_presets: list = []
         for k in b_ui_names_presets:
             inputs_presets += B_UI_Map._map[k].getInput()
@@ -1113,7 +1134,7 @@ class B_UI_Dropdown(B_UI):
 
         self.b_prompt_ui.bind(gr_prompt, gr_prompt_negative)
     
-    def getGrForWebUI(self) -> list[typing.Any]:
+    def getGrForWebUI(self) -> list[grComponent]:
         return [self.gr_dropdown] + self.gr_buttons + self.b_prompt_ui.getGrForWebUI()
     
     def reset(self, clear: bool = False) -> None:
@@ -1151,17 +1172,17 @@ class B_UI_Dropdown(B_UI):
             for b_prompt in self.choice_map.values():
                 B_Prompt_Map.update(b_prompt, b_prompt.name not in choices_selected)
     
-    def getInput(self) -> list[typing.Any]:
+    def getInput(self) -> list[grComponent]:
         return self.b_prompt_ui.getInput()
     
-    def getOutput(self) -> list[typing.Any]:
+    def getOutput(self) -> list[grBlock]:
         return [self.gr_dropdown, self.gr_buttons_container] + self.gr_buttons + self.b_prompt_ui.getOutput()
     
     def getOutputUpdate(self) -> list:
         return [self.initChoicesSelected(), self.getPromptButtonContainerUpdate()] + self.getPromptButtonUpdates() + self.b_prompt_ui.getOutputUpdate()
     
     def getPromptButtonContainerUpdate(self):
-        gr_buttons_container_update = gr.Row
+        gr_buttons_container_update = grRow
         if is_gradio_3:
             gr_buttons_container_update = self.gr_buttons_container.update
         
@@ -1171,7 +1192,7 @@ class B_UI_Dropdown(B_UI):
         updates = []
         i: int = 0
         for b_prompt in self.choice_list:
-            gr_button_update = gr.Button
+            gr_button_update = grButton
             if is_gradio_3:
                 gr_button_update = self.gr_buttons[i].update
             
@@ -1244,9 +1265,9 @@ class B_UI_Container(B_UI, ABC):
 
         self.children = children if children is not None else []
 
-        self.gr_container: typing.Any = None
-        self.gr_reset: typing.Any = None
-        self.gr_random: typing.Any = None
+        self.gr_container: grBlockContext = None
+        self.gr_reset: grButton = None
+        self.gr_random: grButton = None
     
     def init(self) -> None:
         for b_ui in self.children:
@@ -1260,14 +1281,14 @@ class B_UI_Container(B_UI, ABC):
             
             if self.build_button_reset or self.build_button_random:
                 def _buildReset():
-                    self.gr_reset = gr.Button(f"Reset {self.name}")
+                    self.gr_reset = grButton(f"Reset {self.name}")
                 def _buildRandomize():
-                    self.gr_random = gr.Button(f"Randomize {self.name}")
+                    self.gr_random = grButton(f"Randomize {self.name}")
 
                 B_UI_Separator._build()
                 
                 if self.build_button_reset and self.build_button_random:
-                    with gr.Row():
+                    with grRow():
                         _buildRandomize()
                         _buildReset()
                 elif self.build_button_random:
@@ -1275,7 +1296,7 @@ class B_UI_Container(B_UI, ABC):
                 else:
                     _buildReset()  
     
-    def bind(self, gr_prompt: typing.Any, gr_prompt_negative: typing.Any) -> None:
+    def bind(self, gr_prompt: grTextbox, gr_prompt_negative: grTextbox) -> None:
         # Children
         for b_ui in self.children:
             b_ui.bind(gr_prompt, gr_prompt_negative)
@@ -1304,8 +1325,8 @@ class B_UI_Container(B_UI, ABC):
                 , outputs = [gr_prompt, gr_prompt_negative] + self.getOutput()
             )
     
-    def getGrForWebUI(self) -> list[typing.Any]:
-        gr_list: list[typing.Any] = []
+    def getGrForWebUI(self) -> list[grComponent]:
+        gr_list: list[grComponent] = []
 
         if self.build_button_random:
             gr_list.append(self.gr_random)
@@ -1331,14 +1352,14 @@ class B_UI_Container(B_UI, ABC):
         for b_ui in self.children:
             b_ui.randomize()
     
-    def getInput(self) -> list[typing.Any]:
-        gr_inputs: list[typing.Any] = []
+    def getInput(self) -> list[grComponent]:
+        gr_inputs: list[grComponent] = []
         for b_ui in self.children:
             gr_inputs += b_ui.getInput()
         return gr_inputs
     
-    def getOutput(self) -> list[typing.Any]:
-        gr_outputs: list[typing.Any] = []
+    def getOutput(self) -> list[grBlock]:
+        gr_outputs: list[grBlock] = []
         for b_ui in self.children:
             gr_outputs += b_ui.getOutput()
         return gr_outputs
@@ -1353,7 +1374,7 @@ class B_UI_Container(B_UI, ABC):
         self.children.append(item)
     
     @abstractmethod
-    def buildContainer(self) -> typing.Any:
+    def buildContainer(self) -> grBlockContext:
         pass
 
 class B_UI_Container_Tab(B_UI_Container):
@@ -1368,8 +1389,8 @@ class B_UI_Container_Tab(B_UI_Container):
     def __init__(self, name: str = "Tab", build_button_reset: bool = True, build_button_random: bool = True, children: list[B_UI] = None):
         super().__init__(name, build_button_reset, build_button_random, children)
     
-    def buildContainer(self) -> typing.Any:
-        return gr.Tab(self.name)
+    def buildContainer(self) -> grBlockContext:
+        return grTab(self.name)
 
 class B_UI_Container_Row(B_UI_Container):
     @staticmethod
@@ -1383,8 +1404,8 @@ class B_UI_Container_Row(B_UI_Container):
     def __init__(self, name: str = "Row", build_button_reset: bool = False, build_button_random: bool = False, children: list[B_UI] = None):
         super().__init__(name, build_button_reset, build_button_random, children)
     
-    def buildContainer(self) -> typing.Any:
-        return gr.Row()
+    def buildContainer(self) -> grBlockContext:
+        return grRow()
 
 class B_UI_Container_Column(B_UI_Container):
     @staticmethod
@@ -1401,8 +1422,8 @@ class B_UI_Container_Column(B_UI_Container):
 
         self.scale = scale
     
-    def buildContainer(self) -> typing.Any:
-        return gr.Column(scale = self.scale)
+    def buildContainer(self) -> grBlockContext:
+        return grColumn(scale = self.scale)
 
 class B_UI_Container_Accordion(B_UI_Container):
     @staticmethod
@@ -1419,8 +1440,8 @@ class B_UI_Container_Accordion(B_UI_Container):
 
         self.init_open = init_open
     
-    def buildContainer(self) -> typing.Any:
-        return gr.Accordion(label = self.name, open = self.init_open)
+    def buildContainer(self) -> grBlockContext:
+        return grAccordion(label = self.name, open = self.init_open)
 
 class B_UI_Container_Group(B_UI_Container):
     @staticmethod
@@ -1434,8 +1455,8 @@ class B_UI_Container_Group(B_UI_Container):
     def __init__(self, name: str = "Group", build_button_reset: bool = False, build_button_random: bool = False, children: list[B_UI] = None):
         super().__init__(name, build_button_reset, build_button_random, children)
     
-    def buildContainer(self) -> typing.Any:
-        return gr.Group()
+    def buildContainer(self) -> grBlockContext:
+        return grGroup()
 
 class B_Prompt_Map():
     _map: dict[str, tuple[B_Prompt, bool]] = {}
@@ -1478,8 +1499,8 @@ class B_Prompt_Map():
 
 class B_UI_Map():
     _map: dict[str, B_UI] = {}
-    _inputs: list[typing.Any] = []
-    _outputs: list[typing.Any] = []
+    _inputs: list[grComponent] = []
+    _outputs: list[grBlock] = []
     
     @staticmethod
     def add(b_ui: B_UI):
@@ -1490,15 +1511,15 @@ class B_UI_Map():
         B_UI_Map._outputs += b_ui.getOutput()
     
     @staticmethod
-    def getInput():
-        inputs = []
+    def getInput() -> list[grComponent]:
+        inputs: list[grComponent] = []
         for b_ui in B_UI_Map._map.values():
             inputs += b_ui.getInput()
         return inputs
     
     @staticmethod
-    def getOutput():
-        outputs = []
+    def getOutput() -> list[grBlock]:
+        outputs: list[grBlock] = []
         for b_ui in B_UI_Map._map.values():
             outputs += b_ui.getOutput()
         return outputs
@@ -1561,15 +1582,15 @@ class B_UI_Master():
         
         #! validate
 
-        self.gr_prompt: typing.Any = None
-        self.gr_prompt_negative: typing.Any = None
-        self.gr_apply: typing.Any = None
-        self.gr_remove: typing.Any = None
-        self.gr_clear: typing.Any = None
-        self.gr_reset: typing.Any = None
-        self.gr_prepend_prompts: typing.Any = None
-        self.gr_use_break: typing.Any = None
-        self.gr_clear_config: typing.Any
+        self.gr_prompt: grTextbox = None
+        self.gr_prompt_negative: grTextbox = None
+        self.gr_apply: grButton = None
+        self.gr_remove: grButton = None
+        self.gr_clear: grButton = None
+        self.gr_reset: grButton = None
+        self.gr_prepend_prompts: grCheckbox = None
+        self.gr_use_break: grCheckbox = None
+        self.gr_clear_config: grButton
     
     def parseLayout(self) -> list[B_UI]:
         layout: list[B_UI] = []
@@ -1771,7 +1792,7 @@ class B_UI_Master():
         # PRESETS
         if show_presets:
             B_UI_Separator._build()
-            with gr.Accordion("Presets", open = False):
+            with grAccordion("Presets", open = False):
                 i = 0
                 for preset in self.presets:
                     preset.build()
@@ -1787,27 +1808,27 @@ class B_UI_Master():
         # MAIN
         B_UI_Separator._build()
         prompt = B_Prompt_Map.buildPromptUpdate()
-        self.gr_prompt = gr.Textbox(label = "Final Prompt", value = prompt[0])
-        self.gr_prompt_negative = gr.Textbox(label = "Final Negative Prompt", value = prompt[1])
+        self.gr_prompt = grTextbox(label = "Final Prompt", value = prompt[0])
+        self.gr_prompt_negative = grTextbox(label = "Final Negative Prompt", value = prompt[1])
         B_UI_Separator._build()
-        with gr.Row():
-            self.gr_apply = gr.Button("Apply All")
-            self.gr_remove = gr.Button("Remove All")
+        with grRow():
+            self.gr_apply = grButton("Apply All")
+            self.gr_remove = grButton("Remove All")
         B_UI_Separator._build()
-        with gr.Row():
-            self.gr_clear = gr.Button("Clear All")
-            self.gr_reset = gr.Button("Reset All")
+        with grRow():
+            self.gr_clear = grButton("Clear All")
+            self.gr_reset = grButton("Reset All")
         
         # EXTRAS
         B_UI_Separator._build()
-        with gr.Accordion("Settings", open = False):
-            self.gr_prepend_prompts = gr.Checkbox(label = "Prepend prompts?")
-            self.gr_use_break = gr.Checkbox(
+        with grAccordion("Settings", open = False):
+            self.gr_prepend_prompts = grCheckbox(label = "Prepend prompts?")
+            self.gr_use_break = grCheckbox(
                 label = "Use BREAK?"
                 , value = True
             )
             B_UI_Separator._build()
-            self.gr_clear_config = gr.Button("Clear config")
+            self.gr_clear_config = grButton("Clear config")
     
     def bind(self) -> None:
         # - Presets
@@ -1869,7 +1890,7 @@ class B_UI_Master():
         
         #! Would be better if the original config file dump function is used somehow:
         def _fnClearConfigFile():
-            gr_clear_config_update = gr.Button
+            gr_clear_config_update = grButton
             if is_gradio_3:
                 gr_clear_config_update = self.gr_clear_config.update
             
@@ -1892,11 +1913,11 @@ class B_UI_Master():
             , outputs = self.gr_clear_config
         )
     
-    def ui(self) -> list[typing.Any]:
+    def ui(self) -> list[grComponent]:
         self.build()
         self.bind()
 
-        gr_list: list[typing.Any] = [
+        gr_list: list[grComponent] = [
             self.gr_prompt
             , self.gr_prompt_negative
             , self.gr_prepend_prompts
