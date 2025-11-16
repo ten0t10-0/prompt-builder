@@ -773,6 +773,8 @@ class B_PromptEditLink(B_Prompt):
             , edit_prompt_a_value=prompt_a
             , edit_prompt_b_value=prompt_b
             , is_negative_value=is_negative
+            , is_negative_enabled=True
+            , is_negative_visible=True
             , prefix_value=prefix
             , postfix_value=postfix
         )
