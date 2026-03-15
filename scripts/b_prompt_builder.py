@@ -343,8 +343,10 @@ class B_Value(Generic[T]):
     def update(self, new_value: T | None, default_if_none: bool):
         if new_value is not None:
             self.current = new_value
+            return True
         elif default_if_none:
             self.reset()
+        return False
     
     def reset(self):
         self.current = self.default
@@ -507,8 +509,8 @@ class B_Prompt(ABC):
     
     def update(self, b_args: B_Args, default_if_none: bool):
         if not b_args.NO_ARGS:
-            self.prompt.value.update(b_args.prompt, default_if_none)
-            self.emphasis.value.update(b_args.emphasis, default_if_none)
+            self.prompt.value.update(b_args.prompt, default_if_none) or self.prompt.value.update(b_args.prompt_pos, default_if_none)
+            self.emphasis.value.update(b_args.emphasis, default_if_none) or self.emphasis.value.update(b_args.emphasis_pos, default_if_none)
             self.prompt_neg.value.update(b_args.prompt_neg, default_if_none)
             self.emphasis_neg.value.update(b_args.emphasis_neg, default_if_none)
             self.edit.value.update(b_args.edit, default_if_none)
