@@ -1,5 +1,5 @@
 # prompt-builder
-Custom script for [AUTOMATIC1111/stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui)\ and forks
+Custom script for [AUTOMATIC1111/stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) and forks\
 Prompt builder/manager with customizable UI
 
 **Installation**
