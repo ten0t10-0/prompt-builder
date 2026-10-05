@@ -1,7 +1,7 @@
 # prompt-builder
-Custom script for [AUTOMATIC1111/stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) and forks\
+Custom node for [Comfy-Org/ComfyUI](https://github.com/comfy-org/comfyui)\
 Prompt builder/manager with customizable UI
 
-**Installation**
-- Copy `javascript` and `scripts` folders to base directory
-- Build up layout and prompts in `scripts/b_prompt_builder/layout.txt`
+**Installation**\
+Place this repo in the `custom_nodes` folder
+- `git clone https://github.com/ten0t10-0/prompt-builder.git -b comfyui-implementation`
