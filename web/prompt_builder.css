@@ -1,0 +1,10 @@
+.b-prompt-builder-container {
+    padding: 8px;
+    font-family: var(--font-family);
+    color: var(--fg-color);
+}
+
+.b-header {
+    font-weight: bold;
+    margin-bottom: 8px;
+}

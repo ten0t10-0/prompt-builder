@@ -1,0 +1,122 @@
+title: Prompt Builder
+
+lists:
+  colors:
+    - Red
+    - Blue
+    - Green
+    - Black
+    - White
+
+tabs:
+  - name: Meta
+    type: tab
+    children:
+      - type: select
+        name: Artists
+        prefix: by
+        children:
+          - type: single
+            name: Some artist
+            prompt: some artist
+      - type: select
+        name: Theme
+        sort: false
+        children:
+          - type: single
+            name: Medieval
+            prompt: medieval
+            activated: true
+          - type: single
+            name: Fantasy
+            prompt: fantasy
+            activated: true
+          - type: single
+            name: Cyberpunk
+            prompt: cyberpunk
+      - type: tab
+        name: Style Options
+        children:
+          - type: row
+            children:
+              - type: column
+                scale: 2
+                children:
+                  - type: edit
+                    name: Style
+                    prompt_a: flat color
+                    prompt_b: anime coloring
+                    edit: 0.7
+              - type: column
+                scale: 3
+                children:
+                  - type: edit_link
+                    name: Coloring (Linked - Style)
+                    link: Style
+                    prompt_a: muted color
+                    prompt_b: colorful
+          - type: tab
+            name: Advanced Style
+            children:
+              - type: edit
+                name: Texture
+                prompt_a: smooth
+                prompt_b: grainy
+                edit: 0.3
+              - type: edit
+                name: Lighting
+                prompt_a: soft
+                prompt_b: dramatic
+                edit: 0.5
+      - type: tab
+        name: Test prompts
+        children:
+          - type: row
+            children:
+              - type: column
+                scale: 2
+                children:
+                  - type: single
+                    name: Prompt 1
+                    prompt: prompt 1
+              - type: column
+                scale: 2
+                children:
+                  - type: single
+                    name: Prompt 2
+                    prompt: prompt 2
+
+  - name: People
+    type: tab
+    children:
+      - type: single
+        name: Single prompt
+        prompt: 1boy
+        emphasis: 1
+        activated: true
+      - type: separator
+      - type: edit
+        name: Skin shade
+        prompt_a: dark
+        prompt_b: pale
+        edit: 0.4
+        postfix: skin
+      - type: separator
+      - type: dual
+        name: Hair style
+        prompt_pos: low ponytail
+        prompt_neg: short hair
+        emphasis_neg: 0.8
+      - type: separator
+      - type: select
+        name: Clothing
+        children:
+          - type: from_list
+            name: Colors
+            postfix: clothes
+          - type: single
+            name: Formal
+            prompt: formal clothes
+          - type: single
+            name: Overalls
+            prompt: overalls
