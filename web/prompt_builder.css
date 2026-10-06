@@ -1,10 +1,468 @@
-.b-prompt-builder-container {
-    padding: 8px;
+/* B Prompt Builder — compact theme
+   Type scale: 13px standard, 11px context (subtitles, hints, paired controls)
+   Goal: minimal gaps/margins while keeping readability. */
+
+#b-prompt-builder-panel {
+    font-size: 13px;
+    line-height: 1.3;
     font-family: var(--font-family);
     color: var(--fg-color);
 }
 
+#b-prompt-builder-panel * {
+    box-sizing: border-box;
+}
+
+/* ---------- shell ---------- */
+.bpb-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.bpb-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border-color, #555);
+    flex-shrink: 0;
+}
+
+.bpb-title {
+    font-weight: bold;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bpb-header-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.bpb-content-wrap {
+    flex: 1;
+    overflow: auto;
+    padding: 4px 6px;
+    min-height: 0;
+}
+
+.bpb-footer {
+    padding: 4px 6px;
+    border-top: 1px solid var(--border-color, #555);
+    flex-shrink: 0;
+    background: var(--comfy-menu-bg, #1e1e1e);
+}
+
+/* ---------- generic controls ---------- */
+#b-prompt-builder-panel button {
+    font-size: 11px;
+    line-height: 1.2;
+    padding: 1px 6px;
+    background: var(--comfy-input-bg, #333);
+    color: var(--fg-color, #eee);
+    border: 1px solid var(--border-color, #555);
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+#b-prompt-builder-panel button:hover {
+    filter: brightness(1.15);
+}
+
+#b-prompt-builder-panel input[type="text"],
+#b-prompt-builder-panel input[type="number"] {
+    font-size: 11px;
+    line-height: 1.2;
+    padding: 1px 4px;
+    background: var(--comfy-input-bg, #222);
+    color: var(--fg-color, #eee);
+    border: 1px solid var(--border-color, #555);
+    border-radius: 3px;
+    margin: 0;
+}
+
+#b-prompt-builder-panel input[type="checkbox"] {
+    width: 12px;
+    height: 12px;
+    margin: 0;
+    flex-shrink: 0;
+    accent-color: var(--accent-color, #00bcd4);
+}
+
+#b-prompt-builder-panel input[type="range"] {
+    margin: 0;
+    padding: 0;
+    height: 18px;
+    flex: 1;
+    min-width: 40px;
+}
+
+/* ---------- tabs ---------- */
+.bpb-tabbar {
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+}
+
+#b-prompt-builder-panel .bpb-tab-btn {
+    padding: 2px 6px;
+    font-size: 13px;
+    line-height: 1.3;
+    font-weight: normal;
+}
+
+#b-prompt-builder-panel .bpb-tab-btn.bpb-active {
+    font-weight: normal;
+    border-bottom: 2px solid var(--accent-color, #00bcd4);
+}
+
+.bpb-subtabs {
+    margin-top: 4px;
+}
+
+.bpb-subcontent {
+    margin-top: 2px;
+    padding-left: 6px;
+    border-left: 2px solid var(--border-color, #555);
+}
+
+/* ---------- layout containers ---------- */
+.bpb-row {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.bpb-row > * {
+    flex: 1;
+    min-width: 100px;
+    min-width: 0;
+}
+
+.bpb-col {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.bpb-sep {
+    border: none;
+    border-top: 1px dashed var(--border-color, #555);
+    margin: 4px 0;
+}
+
+/* ---------- collapsible blocks: group / select / dual ---------- */
+.bpb-block {
+    border: 1px solid var(--border-color, #555);
+    border-radius: 3px;
+    margin-bottom: 4px;
+    overflow: hidden;
+}
+
+.bpb-block-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 2px 6px;
+    background: var(--comfy-input-bg, #333);
+    cursor: pointer;
+    font-size: 13px;
+    min-height: 22px;
+}
+
+.bpb-block-head b {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bpb-block-body {
+    padding: 2px 4px;
+}
+
+.bpb-caret {
+    font-size: 11px;
+    color: gray;
+    flex-shrink: 0;
+}
+
+.bpb-push-right {
+    margin-left: auto;
+}
+
+.bpb-clear-btn {
+    padding: 0 5px !important;
+    font-size: 11px !important;
+    background: transparent !important;
+    color: var(--accent-color, #00bcd4) !important;
+    border: 1px solid var(--accent-color, #00bcd4) !important;
+    border-radius: 3px;
+    cursor: pointer;
+    line-height: 1.4 !important;
+}
+
+.bpb-head-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+/* ---------- single ---------- */
+.bpb-single {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 4px;
+    min-height: 22px;
+    border-radius: 3px;
+    margin: 0;
+}
+
+.bpb-single.bpb-on {
+    background: var(--comfy-input-bg-focus, #3a3a3a);
+}
+
+.bpb-single-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.bpb-single-name {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bpb-single-controls {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.bpb-single-controls input[type="text"] {
+    width: 90px;
+}
+
+.bpb-single-controls input[type="number"] {
+    width: 42px;
+}
+
+.bpb-neg-toggle {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    color: #ff6b6b;
+    font-size: 11px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* ---------- dual ---------- */
+.bpb-dual-field {
+    margin-bottom: 2px;
+}
+
+.bpb-dual-field:last-child {
+    margin-bottom: 0;
+}
+
+.bpb-mini-label {
+    font-size: 13px;
+    color: gray;
+    margin-bottom: 1px;
+    display: block;
+    line-height: 1.3;
+}
+
+.bpb-inline-row {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+}
+
+#b-prompt-builder-panel .bpb-inline-row input[type="text"],
+#b-prompt-builder-panel .bpb-inline-row input[type="number"] {
+    font-size: 13px;
+}
+
+.bpb-inline-row input[type="text"] {
+    flex: 1;
+    min-width: 0;
+}
+
+.bpb-inline-row input[type="number"] {
+    width: 48px;
+    flex-shrink: 0;
+}
+
+.bpb-affix {
+    font-size: 11px;
+    color: gray;
+    font-weight: normal;
+}
+
+/* ---------- edit / edit_link ---------- */
+/* Leaf rhythm matches .bpb-single: 22px row. Outer has no vertical padding
+   so the label's 22px min-height lands exactly on single's height. */
+.bpb-edit {
+    margin: 0;
+    padding: 0 4px;
+    min-height: 22px;
+    border-radius: 3px;
+}
+
+.bpb-edit-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 0;
+    cursor: pointer;
+    font-size: 13px;
+    min-height: 22px;
+}
+
+.bpb-edit-body {
+    margin-left: 16px;
+}
+
+.bpb-range-hint {
+    font-size: 13px;
+    color: gray;
+    margin-bottom: 1px;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.bpb-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+.bpb-val {
+    font-size: 11px;
+    min-width: 22px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.bpb-info {
+    cursor: help;
+    color: var(--accent-color, #00bcd4);
+    margin-left: 2px;
+    font-size: 13px;
+    line-height: 1;
+}
+
+/* ---------- from_list ---------- */
+/* Leaf rhythm matches .bpb-single */
+.bpb-list-head {
+    font-size: 13px;
+    margin: 0;
+    padding: 1px 4px;
+    line-height: 1.3;
+    min-height: 22px;
+}
+
+.bpb-list-src {
+    font-weight: normal;
+    font-style: italic;
+    color: var(--description-color, #aaa);
+    margin-left: 6px;
+    font-size: 11px;
+}
+
+.bpb-list-empty {
+    font-size: 11px;
+    color: gray;
+}
+
+.bpb-list-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    padding: 1px 4px;
+    min-height: 22px;
+    font-size: 13px;
+    cursor: pointer;
+    line-height: 1.3;
+    border-radius: 3px;
+}
+
+/* ---------- preset / fallback ---------- */
+.bpb-preset {
+    margin: 1px !important;
+    padding: 2px 6px !important;
+    font-size: 13px !important;
+}
+
+.bpb-unknown {
+    font-size: 11px;
+    color: gray;
+    margin: 1px 0;
+}
+
+/* ---------- footer previews ---------- */
+.bpb-preview-label {
+    font-size: 13px;
+    color: gray;
+    margin-bottom: 1px;
+    line-height: 1.3;
+}
+
+.bpb-preview-label + .bpb-preview-label,
+.bpb-preview + .bpb-preview-label {
+    margin-top: 4px;
+}
+
+.bpb-preview {
+    font-size: 13px;
+    line-height: 1.35;
+    word-break: break-word;
+    white-space: pre-wrap;
+    max-height: 84px;
+    overflow: auto;
+    font-family: monospace;
+    background: var(--comfy-input-bg, #333);
+    padding: 3px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border-color, #555);
+    margin: 0;
+}
+
+/* legacy container hook */
+.b-prompt-builder-container {
+    padding: 4px 6px;
+    font-family: var(--font-family);
+    color: var(--fg-color);
+    font-size: 13px;
+}
+
 .b-header {
     font-weight: bold;
-    margin-bottom: 8px;
+    font-size: 13px;
+    margin-bottom: 4px;
 }

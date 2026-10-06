@@ -29,7 +29,10 @@ class PromptElement:
                     prompt = prefix.strip() + ' ' + prompt.strip()
                 if postfix:
                     prompt = prompt.strip() + ' ' + postfix.strip()
-            if emphasis != 1 and prompt:
+            # If emphasis is 0, omit the prompt
+            if emphasis <= 0:
+                prompt = ''
+            elif emphasis != 1 and prompt:
                 prompt = '(' + prompt + ':' + str(emphasis) + ')'
             if neg:
                 return PromptPair('', prompt)
@@ -129,7 +132,7 @@ class ElementBuilder:
     @staticmethod
     def from_element(elem, state=None, lists=None):
         data = dict(getattr(elem, 'data', {}) or {})
-        name = getattr(elem, 'name', '')
+        name = str(getattr(elem, 'name', ''))
         activated = data.pop('activated', False)
         if state is not None and hasattr(state, 'activated') and name and name in state.activated:
             activated = bool(state.activated[name])
@@ -154,6 +157,12 @@ class ElementBuilder:
         # For dual, read pos/neg prompts and emphases from state
         if etype == 'dual' and state is not None and hasattr(state, 'values'):
             for k in ('prompt_pos', 'prompt_neg', 'emphasis_pos', 'emphasis_neg'):
+                state_key = name + '_' + k
+                if state_key in state.values:
+                    data[k] = state.values[state_key]
+        # For single, read emphasis, is_negative, and prompt from state
+        if etype == 'single' and state is not None and hasattr(state, 'values'):
+            for k in ('emphasis', 'is_negative', 'prompt'):
                 state_key = name + '_' + k
                 if state_key in state.values:
                     data[k] = state.values[state_key]

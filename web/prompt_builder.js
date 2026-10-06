@@ -1,6 +1,18 @@
 import { app } from "../../scripts/app.js";
 
 const id = 'b-prompt-builder-panel';
+const cssId = 'bpb-css';
+const cssHref = '/extensions/prompt-builder/prompt_builder.css';
+
+function ensureCss() {
+  if (document.getElementById(cssId)) return;
+  const link = document.createElement('link');
+  link.id = cssId;
+  link.rel = 'stylesheet';
+  link.type = 'text/css';
+  link.href = cssHref;
+  document.head.appendChild(link);
+}
 
 let state = {
   values: {},
@@ -57,47 +69,33 @@ async function evalState() {
 function createPanel() {
   const panel = document.createElement('div');
   panel.id = id;
-  panel.style.display = 'flex';
-  panel.style.flexDirection = 'column';
-  panel.style.height = '100%';
-  panel.style.minHeight = '0'; // Critical for flex child to shrink
+  panel.className = 'bpb-panel';
   
   // Header with title and controls
   const header = document.createElement('div');
-  header.style.padding = '8px';
-  header.style.borderBottom = '1px solid var(--border-color,#555)';
-  header.style.display = 'flex';
-  header.style.justifyContent = 'space-between';
-  header.style.alignItems = 'center';
-  header.style.flexShrink = '0';
+  header.className = 'bpb-header';
   header.innerHTML = 
-    '<span style="font-weight:bold">B Prompt Builder</span>' +
-    '<div style="display:flex;gap:4px">' +
-    '<button id="bpb-clear-all" style="padding:2px 8px;font-size:0.75em;background:var(--comfy-input-bg,#333);color:var(--fg-color,#eee);border:1px solid var(--border-color,#555);border-radius:3px" title="Clear all selections">Clear All</button>' +
-    '<button id="bpb-reset" style="padding:2px 8px;font-size:0.75em;background:var(--comfy-input-bg,#333);color:var(--fg-color,#eee);border:1px solid var(--border-color,#555);border-radius:3px" title="Reset to initial layout state">Reset</button>' +
+    '<span class="bpb-title">B Prompt Builder</span>' +
+    '<div class="bpb-header-actions">' +
+    '<button id="bpb-clear-all" title="Clear all selections">Clear All</button>' +
+    '<button id="bpb-reset" title="Reset to initial layout state">Reset</button>' +
     '</div>';
   
   // Scrollable content area
   const contentWrapper = document.createElement('div');
-  contentWrapper.style.flex = '1';
-  contentWrapper.style.overflow = 'auto';
-  contentWrapper.style.padding = '8px';
-  contentWrapper.style.minHeight = '0'; // Critical for flex child to shrink
+  contentWrapper.className = 'bpb-content-wrap';
   contentWrapper.innerHTML =
     '<div id="bpb-tabs"></div>' +
-    '<div id="bpb-content" style="margin-top:8px;"></div>';
+    '<div id="bpb-content"></div>';
   
   // Sticky footer with prompt previews
   const footer = document.createElement('div');
-  footer.style.padding = '8px';
-  footer.style.borderTop = '1px solid var(--border-color,#555)';
-  footer.style.flexShrink = '0';
-  footer.style.background = 'var(--comfy-menu-bg,#1e1e1e)';
+  footer.className = 'bpb-footer';
   footer.innerHTML =
-    '<div style="font-size:0.75em;color:gray;margin-bottom:2px">Positive:</div>' +
-    '<div id="bpb-pos" style="font-size:0.8em;word-break:break-word;white-space:pre-wrap;max-height:120px;overflow:auto;font-family:monospace;background:var(--comfy-input-bg,#333);padding:6px;border-radius:3px;border:1px solid var(--border-color,#555)"></div>' +
-    '<div style="font-size:0.75em;color:gray;margin:6px 0 2px">Negative:</div>' +
-    '<div id="bpb-neg" style="font-size:0.8em;word-break:break-word;white-space:pre-wrap;max-height:120px;overflow:auto;font-family:monospace;background:var(--comfy-input-bg,#333);padding:6px;border-radius:3px;border:1px solid var(--border-color,#555)"></div>';
+    '<div class="bpb-preview-label">Positive:</div>' +
+    '<div id="bpb-pos" class="bpb-preview"></div>' +
+    '<div class="bpb-preview-label">Negative:</div>' +
+    '<div id="bpb-neg" class="bpb-preview"></div>';
   
   panel.appendChild(header);
   panel.appendChild(contentWrapper);
@@ -162,10 +160,11 @@ function renderTabs(tabs, parentId = null, isSubTabs = false) {
     return;
   }
   const activeIdx = state.active_tabs[tabId] || 0;
-  let html = '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">';
+  let html = '<div class="bpb-tabbar">';
   for (let i = 0; i < tabs.length; i++) {
-    const active = activeIdx === i ? 'font-weight:bold;border-bottom:2px solid var(--accent-color,#00bcd4)' : '';
-    html += '<button data-tabid="' + escapeHtml(tabId) + '" data-i="' + i + '" style="padding:4px 8px;background:var(--comfy-input-bg,#333);color:var(--fg-color,#eee);border:1px solid var(--border-color,#555);' + active + '">' + escapeHtml(tabs[i].name || 'Tab ' + (i+1)) + '</button>';
+    const active = activeIdx === i ? ' bpb-active' : '';
+    const label = escapeHtml(tabs[i].name || 'Tab ' + (i+1));
+    html += '<button class="bpb-tab-btn' + active + '" data-tabid="' + escapeHtml(tabId) + '" data-i="' + i + '">' + label + '</button>';
   }
   html += '</div>';
   el.innerHTML = html;
@@ -212,8 +211,8 @@ function renderNestedContent(tabs, tabId) {
   if (tabChildren.length > 0) {
     const subTabId = tabId + '::subtabs';
     const safeId = subTabId.replace(/::/g, '-');
-    html += '<div id="bpb-tabs-' + escapeHtml(safeId) + '" style="margin-top:8px"></div>';
-    html += '<div id="bpb-content-' + escapeHtml(safeId) + '" style="margin-top:8px;padding-left:8px;border-left:2px solid var(--border-color,#555)"></div>';
+    html += '<div id="bpb-tabs-' + escapeHtml(safeId) + '" class="bpb-subtabs"></div>';
+    html += '<div id="bpb-content-' + escapeHtml(safeId) + '" class="bpb-subcontent"></div>';
     // Schedule tab bar rendering
     setTimeout(() => renderTabs(tabChildren, subTabId), 0);
   }
@@ -301,9 +300,63 @@ function renderNestedContent(tabs, tabId) {
         const disp = document.getElementById('v-' + name);
         if (disp) disp.textContent = String(state.values[name]);
         scheduleEval();
+      } else if (t === 'checkbox') {
+        state.values[name] = el.checked;
+        scheduleEval();
       }
     };
   });
+}
+
+function getListItems(listName) {
+  const lists = window.__prompt_builder_lists || {};
+  for (const [k, v] of Object.entries(lists)) {
+    if (String(k).toLowerCase() === String(listName).toLowerCase()) return v;
+  }
+  return [];
+}
+
+// Expand a from_list element into single-like options.
+// Always sorted alphabetically by display label so list options
+// interleave deterministically with normal singles.
+function expandFromListOptions(c, parentSelectName, parentTabId) {
+  const listName = c.name || c.i;
+  const postfix = c.postfix || '';
+  const selectName = parentSelectName || (parentTabId || '').split('::').pop() || 'select';
+  const items = getListItems(listName);
+  const safePostfix = postfix ? '_' + String(postfix).replace(/\s+/g, '_') : '';
+  const opts = (items || []).map(item => ({
+    type: 'single',
+    name: selectName + '_' + listName + safePostfix + '_' + item,
+    display: String(item) + (postfix ? ' ' + postfix : ''),
+    prompt: String(item).toLowerCase(),
+    _fromList: true
+  }));
+  opts.sort((a, b) => String(a.display).localeCompare(String(b.display)));
+  return opts;
+}
+
+function renderSingleRow(name, displayLabel, opts) {
+  opts = opts || {};
+  const act = !!state.activated[name];
+  const emphasis = parseFloat(state.values[name + '_emphasis'] ?? opts.emphasis ?? 1);
+  const isNegative = state.values[name + '_is_negative'] ?? opts.is_negative ?? false;
+  const promptValue = escapeHtml(state.values[name + '_prompt'] ?? opts.prompt ?? '');
+  const checkboxId = 'single-act-' + escapeHtml(name);
+  return '<div class="bpb-single' + (act ? ' bpb-on' : '') + '">' +
+    '<label class="bpb-single-label">' +
+      '<input type="checkbox" id="' + checkboxId + '" ' + (act?'checked':'') + ' data-action="toggle-activate" data-name="' + escapeHtml(name) + '"/>' +
+      '<span class="bpb-single-name">' + escapeHtml(displayLabel) + '</span>' +
+    '</label>' +
+    (act ? '<div class="bpb-single-controls">' +
+      '<input type="text" value="' + promptValue + '" data-input="text" data-name="' + escapeHtml(name + '_prompt') + '" title="Prompt text"/>' +
+      '<input type="number" min="0" step="0.1" value="' + emphasis + '" data-input="range" data-name="' + escapeHtml(name + '_emphasis') + '" title="Emphasis (0 to omit)"/>' +
+      '<label class="bpb-neg-toggle" title="Toggle negative prompt">' +
+        '<input type="checkbox" ' + (isNegative?'checked':'') + ' data-input="checkbox" data-name="' + escapeHtml(name + '_is_negative') + '"/>' +
+        '<span>N</span>' +
+      '</label>' +
+    '</div>' : '') +
+  '</div>';
 }
 
 function renderElement(c, tabs, parentTabId, siblingTabs, currentSelectName) {
@@ -321,50 +374,59 @@ function renderElement(c, tabs, parentTabId, siblingTabs, currentSelectName) {
     if (tabChildren.length > 0) {
       const subTabId = (parentTabId || 'root') + '::' + (c.name || 'tab') + '::subtabs';
       const safeId = subTabId.replace(/::/g, '-');
-      html += '<div id="bpb-tabs-' + escapeHtml(safeId) + '" style="margin-top:8px"></div>';
-      html += '<div id="bpb-content-' + escapeHtml(safeId) + '" style="margin-top:8px;padding-left:8px;border-left:2px solid var(--border-color,#555)"></div>';
+      html += '<div id="bpb-tabs-' + escapeHtml(safeId) + '" class="bpb-subtabs"></div>';
+      html += '<div id="bpb-content-' + escapeHtml(safeId) + '" class="bpb-subcontent"></div>';
       setTimeout(() => renderTabs(tabChildren, subTabId), 0);
     }
     return html;
   }
   if (type === 'row') {
-    let html = '<div style="display:flex;gap:8px;flex-wrap:wrap">';
-    for (let ch of (c.children||[])) html += '<div style="flex:1;min-width:120px">' + renderElement(ch,tabs,parentTabId, c.children, currentSelectName) + '</div>';
+    let html = '<div class="bpb-row">';
+    for (let ch of (c.children||[])) html += '<div>' + renderElement(ch,tabs,parentTabId, c.children, currentSelectName) + '</div>';
     html += '</div>';
     return html;
   }
   if (type === 'column') {
-    let html = '<div style="display:flex;flex-direction:column;gap:6px">';
+    let html = '<div class="bpb-col">';
     for (let ch of (c.children||[])) html += renderElement(ch,tabs,parentTabId, c.children, currentSelectName);
     html += '</div>';
     return html;
   }
-  if (type === 'separator') return '<hr style="border-color:var(--border-color,#555)"/>';
+  if (type === 'separator') return '<hr class="bpb-sep"/>';
   if (type === 'accordion' || type === 'group') {
     const name = c.name || c.label || 'group';
     const exp = state.expanded[name] !== false;
-    const childHtml = exp ? '<div style="padding:6px">' + ((c.children||[]).map(x=>renderElement(x,tabs,parentTabId, c.children, currentSelectName)).join('')) + '</div>' : '';
-    return '<div style="border:1px solid var(--border-color,#555);margin-bottom:6px"><div style="padding:4px;background:var(--comfy-input-bg,#333);cursor:pointer" data-action="toggle-expand" data-name="' + escapeHtml(name) + '">' + escapeHtml(name) + '</div>' + childHtml + '</div>';
+    const childHtml = exp ? '<div class="bpb-block-body">' + ((c.children||[]).map(x=>renderElement(x,tabs,parentTabId, c.children, currentSelectName)).join('')) + '</div>' : '';
+    return '<div class="bpb-block"><div class="bpb-block-head" data-action="toggle-expand" data-name="' + escapeHtml(name) + '">' + escapeHtml(name) + '</div>' + childHtml + '</div>';
   }
   if (type === 'select') {
     const name = c.name || c.i;
     if (!name) return '<div>' + escapeHtml(c.label||'') + '</div>';
     // Collapsed by default
     const exp = state.expanded[name] === true;
-    // Sort children by name unless sort: false
+    // Sort children by name unless sort: false.
+    // List-based options are expanded in place (always alphabetically
+    // sorted) so with sort enabled they interleave with normal singles,
+    // and with sort: false they stay slotted where the from_list appeared.
     const sortChildren = c.sort !== false;
-    let children = c.children || [];
-    if (sortChildren) {
-      children = [...children].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    let children = [];
+    for (const ch of (c.children || [])) {
+      if ((ch.type || '').toLowerCase() === 'from_list') {
+        for (const opt of expandFromListOptions(ch, name, parentTabId)) children.push(opt);
+      } else {
+        children.push(ch);
+      }
     }
-    const childHtml = exp ? '<div style="padding-left:12px;margin-top:4px">' + (children.map(x=>renderElement(x,tabs,parentTabId, c.children, name)).join('')) + '</div>' : '';
-    return '<div style="border:1px solid var(--border-color,#555);margin-bottom:6px;border-radius:4px"><div style="padding:4px 8px;background:var(--comfy-input-bg,#333);cursor:pointer;display:flex;align-items:center;justify-content:space-between" data-action="toggle-expand" data-name="' + escapeHtml(name) + '"><b>' + escapeHtml(c.label||name) + '</b><span style="display:flex;align-items:center;gap:6px"><span style="font-size:0.8em;color:gray">' + (exp ? '▼' : '▶') + '</span><button data-action="clear-select" data-name="' + escapeHtml(name) + '" style="padding:0 6px;font-size:0.7em;background:transparent;color:var(--accent-color,#00bcd4);border:1px solid var(--accent-color,#00bcd4);border-radius:3px;cursor:pointer" title="Clear all selections in this list">Clear</button></span></div>' + childHtml + '</div>';
+    if (sortChildren) {
+      children = [...children].sort((a, b) => String(a.display || a.name || '').localeCompare(String(b.display || b.name || '')));
+    }
+    const childHtml = exp ? '<div class="bpb-block-body">' + (children.map(x => x._fromList ? renderSingleRow(x.name, x.display, { prompt: x.prompt }) : renderElement(x,tabs,parentTabId, c.children, name)).join('')) + '</div>' : '';
+    return '<div class="bpb-block"><div class="bpb-block-head" data-action="toggle-expand" data-name="' + escapeHtml(name) + '"><b>' + escapeHtml(c.label||name) + '</b><span class="bpb-head-right"><span class="bpb-caret">' + (exp ? '▼' : '▶') + '</span><button class="bpb-clear-btn" data-action="clear-select" data-name="' + escapeHtml(name) + '" title="Clear all selections in this list">Clear</button></span></div>' + childHtml + '</div>';
   }
-  if (type === 'single') {
+if (type === 'single') {
     const name = c.name || c.i || c.label;
     if (!name) return '';
-    const act = !!state.activated[name];
-    return '<label style="display:flex;align-items:center;gap:4px;margin:2px 0"><input type="checkbox" ' + (act?'checked':'') + ' data-action="toggle-activate" data-name="' + escapeHtml(name) + '"/>' + escapeHtml(name) + '</label>';
+    return renderSingleRow(name, name, { prompt: c.prompt, emphasis: c.emphasis, is_negative: c.is_negative });
   }
   if (type === 'dual') {
     const name = c.name || c.i || c.label;
@@ -377,24 +439,24 @@ function renderElement(c, tabs, parentTabId, siblingTabs, currentSelectName) {
     const negEmphasis = parseFloat(state.values[name + '_neg_emphasis'] ?? c.emphasis_neg ?? c.emphasis ?? 1);
     const prefix = c.prefix ? escapeHtml(c.prefix) + ' ' : '';
     const postfix = c.postfix ? ' ' + escapeHtml(c.postfix) : '';
-    const childHtml = exp ? '<div style="padding-left:12px;margin-top:4px;padding-bottom:4px">' +
-      '<div style="margin-bottom:6px">' +
-        '<label style="font-size:0.8em;color:gray;margin-bottom:2px;display:block">Positive' + (prefix || postfix ? ' (with affixes)' : '') + '</label>' +
-        '<div style="display:flex;gap:4px;align-items:center">' +
-          '<input type="text" value="' + escapeHtml(posPrompt) + '" data-input="text" data-name="' + escapeHtml(name + '_pos') + '" style="flex:1;padding:4px;font-size:0.85em"/>' +
-          '<input type="number" min="0" step="0.1" value="' + posEmphasis + '" data-input="range" data-name="' + escapeHtml(name + '_pos_emphasis') + '" style="width:70px;padding:4px;font-size:0.85em" title="Emphasis (0 to omit)"/>' +
+    const childHtml = exp ? '<div class="bpb-block-body">' +
+      '<div class="bpb-dual-field">' +
+        '<label class="bpb-mini-label">Positive' + (prefix || postfix ? ' (with affixes)' : '') + '</label>' +
+        '<div class="bpb-inline-row">' +
+          '<input type="text" value="' + escapeHtml(posPrompt) + '" data-input="text" data-name="' + escapeHtml(name + '_pos') + '"/>' +
+          '<input type="number" min="0" step="0.1" value="' + posEmphasis + '" data-input="range" data-name="' + escapeHtml(name + '_pos_emphasis') + '" title="Emphasis (0 to omit)"/>' +
         '</div>' +
       '</div>' +
-      '<div style="margin-bottom:6px">' +
-        '<label style="font-size:0.8em;color:gray;margin-bottom:2px;display:block">Negative' + (prefix || postfix ? ' (with affixes)' : '') + '</label>' +
-        '<div style="display:flex;gap:4px;align-items:center">' +
-          '<input type="text" value="' + escapeHtml(negPrompt) + '" data-input="text" data-name="' + escapeHtml(name + '_neg') + '" style="flex:1;padding:4px;font-size:0.85em"/>' +
-          '<input type="number" min="0" step="0.1" value="' + negEmphasis + '" data-input="range" data-name="' + escapeHtml(name + '_neg_emphasis') + '" style="width:70px;padding:4px;font-size:0.85em" title="Emphasis (0 to omit)"/>' +
+      '<div class="bpb-dual-field">' +
+        '<label class="bpb-mini-label">Negative' + (prefix || postfix ? ' (with affixes)' : '') + '</label>' +
+        '<div class="bpb-inline-row">' +
+          '<input type="text" value="' + escapeHtml(negPrompt) + '" data-input="text" data-name="' + escapeHtml(name + '_neg') + '"/>' +
+          '<input type="number" min="0" step="0.1" value="' + negEmphasis + '" data-input="range" data-name="' + escapeHtml(name + '_neg_emphasis') + '" title="Emphasis (0 to omit)"/>' +
         '</div>' +
       '</div>' +
     '</div>' : '';
-    const affixInfo = (prefix || postfix) ? ' <span style="font-size:0.7em;color:gray">[affix: ' + prefix.trim() + ' / ' + postfix.trim() + ']</span>' : '';
-    return '<div style="border:1px solid var(--border-color,#555);margin-bottom:6px;border-radius:4px"><div style="padding:4px 8px;background:var(--comfy-input-bg,#333);cursor:pointer" data-action="toggle-expand" data-name="' + escapeHtml(name) + '"><input type="checkbox" ' + (act?'checked':'') + ' data-action="toggle-activate" data-name="' + escapeHtml(name) + '" style="margin-right:8px"/><b>' + escapeHtml(name) + '</b>' + affixInfo + ' <span style="font-size:0.8em;color:gray;margin-left:auto">' + (exp ? '▼' : '▶') + '</span></div>' + childHtml + '</div>';
+    const affixInfo = (prefix || postfix) ? ' <span class="bpb-affix">[affix: ' + prefix.trim() + ' / ' + postfix.trim() + ']</span>' : '';
+    return '<div class="bpb-block"><div class="bpb-block-head" data-action="toggle-expand" data-name="' + escapeHtml(name) + '"><input type="checkbox" ' + (act?'checked':'') + ' data-action="toggle-activate" data-name="' + escapeHtml(name) + '"/><b>' + escapeHtml(name) + '</b>' + affixInfo + ' <span class="bpb-caret bpb-push-right">' + (exp ? '▼' : '▶') + '</span></div>' + childHtml + '</div>';
   }
   if (type === 'edit' || type === 'edit_link') {
     const name = c.name || c.i || c.label;
@@ -410,68 +472,40 @@ function renderElement(c, tabs, parentTabId, siblingTabs, currentSelectName) {
     const tooltipText = isLinked 
       ? escapeHtml(rangeText + '\n' + linkText)
       : escapeHtml(rangeText);
-    let html = '<div style="margin:4px 0">';
-    html += '<label style="display:flex;align-items:center;gap:4px;margin-bottom:2px">';
+    let html = '<div class="bpb-edit">';
+    html += '<label class="bpb-edit-label">';
     html += '<input type="checkbox" ' + (act?'checked':'') + ' data-action="toggle-activate" data-name="' + escapeHtml(name) + '"/>';
-    html += '<span style="font-size:0.9em">' + escapeHtml(name);
-    if (isLinked) {
-      html += ' <span style="cursor:help;color:var(--accent-color,#00bcd4);margin-left:4px" title="' + tooltipText + '">ⓘ</span>';
-    }
+    html += '<span>' + escapeHtml(name);
+    html += ' <span class="bpb-info" title="' + tooltipText + '">ⓘ</span>';
     html += '</span>';
     html += '</label>';
-    html += '<div style="margin-left:20px">';
     if (!isLinked) {
-      html += '<div style="font-size:0.8em;color:gray;margin-bottom:2px">' + rangeText + '</div>';
+      html += '<div class="bpb-edit-body">';
+      html += '<div class="bpb-slider-row">';
       html += '<input type="range" min="0" max="1" step="0.1" value="' + val + '" data-input="range" data-name="' + escapeHtml(name) + '"/>';
-      html += '<span id="v-' + escapeHtml(name) + '" style="font-size:0.8em;margin-left:8px">' + val + '</span>';
-    } else {
-      html += '<span style="color:gray;font-size:0.8em" title="' + tooltipText + '"></span>';
+      html += '<span id="v-' + escapeHtml(name) + '" class="bpb-val">' + val + '</span>';
+      html += '</div>';
+      html += '</div>';
     }
-    html += '</div>';
     html += '</div>';
     return html;
   }
   if (type === 'from_list') {
-    const name = c.name || c.i;
-    if (!name) return '<div>from_list</div>';
-    const listName = c.name || c.i;
-    const postfix = c.postfix || '';
-    // Use currentSelectName passed from parent select, fallback to derived name
-    const parentSelectName = currentSelectName || (parentTabId || '').split('::').pop() || 'select';
-    // Case-insensitive list lookup
-    let listItems = [];
-    const lists = window.__prompt_builder_lists || {};
-    for (const [k, v] of Object.entries(lists)) {
-      if (k.toLowerCase() === listName.toLowerCase()) {
-        listItems = v;
-        break;
-      }
+    // Rendered exactly like normal singles (same row + inline controls).
+    // No descriptor header — list options are indistinguishable from singles.
+    const opts = expandFromListOptions(c, currentSelectName, parentTabId);
+    if (!opts.length) {
+      const name = c.name || c.i;
+      return '<div class="bpb-list-empty">[from_list: ' + escapeHtml(name) + ' - list empty]</div>';
     }
-    if (!listItems.length) {
-      return '<div style="font-size:0.9em;color:gray">[from_list: ' + escapeHtml(name) + ' - list empty]</div>';
-    }
-    let html = '<div style="font-size:0.9em;margin-bottom:4px">';
-    html += '<b>' + escapeHtml(name) + '</b>';
-    html += '<span style="font-weight:normal;font-style:italic;color:var(--description-color,#aaa);margin-left:8px;font-size:0.85em">← ' + escapeHtml(listName) + ' list</span>';
-    html += '</div>';
-    for (const item of listItems) {
-      // Include parent select name AND postfix to avoid collisions across selects AND postfixes
-      const safePostfix = postfix ? '_' + postfix.replace(/\s+/g, '_') : '';
-      const itemName = parentSelectName + '_' + listName + safePostfix + '_' + item;
-      const act = !!state.activated[itemName];
-      html += '<label style="display:flex;align-items:center;gap:4px;margin:2px 0">';
-      html += '<input type="checkbox" ' + (act?'checked':'') + ' data-action="toggle-activate" data-name="' + escapeHtml(itemName) + '"/>';
-      html += escapeHtml(item + (postfix ? ' ' + postfix : ''));
-      html += '</label>';
-    }
-    return html;
+    return opts.map(o => renderSingleRow(o.name, o.display, { prompt: o.prompt })).join('');
   }
   if (type === 'preset') {
     const name = c.name || c.label || c.i;
     if (!name) return '';
-    return '<button style="padding:4px 6px;background:var(--comfy-input-bg,#333);color:var(--fg-color,#eee);border:1px solid var(--border-color,#555);margin:2px" data-action="preset" data-name="' + escapeHtml(name) + '">' + escapeHtml(name) + '</button>';
+    return '<button class="bpb-preset" data-action="preset" data-name="' + escapeHtml(name) + '">' + escapeHtml(name) + '</button>';
   }
-  return '<div style="font-size:0.8em;color:gray;margin:2px 0">' + escapeHtml(type) + '</div>';
+  return '<div class="bpb-unknown">' + escapeHtml(type) + '</div>';
 }
 
 function initPanel(panel) {
@@ -509,6 +543,7 @@ function initPanel(panel) {
 app.registerExtension({
   name: 'B.PromptBuilder',
   async setup() {
+    ensureCss();
     if (!app.extensionManager || !app.extensionManager.registerSidebarTab) {
       console.warn('[B Prompt Builder] ComfyUI sidebar tab API not available');
       return;
