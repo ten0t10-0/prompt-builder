@@ -433,25 +433,25 @@ if (type === 'single') {
     if (!name) return '';
     const act = !!state.activated[name];
     const exp = state.expanded[name] === true;
-    const posPrompt = state.values[name + '_pos'] ?? c.prompt_pos ?? '';
-    const negPrompt = state.values[name + '_neg'] ?? c.prompt_neg ?? '';
-    const posEmphasis = parseFloat(state.values[name + '_pos_emphasis'] ?? c.emphasis_pos ?? c.emphasis ?? 1);
-    const negEmphasis = parseFloat(state.values[name + '_neg_emphasis'] ?? c.emphasis_neg ?? c.emphasis ?? 1);
+    const posPrompt = state.values[name + '_prompt_pos'] ?? c.prompt_pos ?? '';
+    const negPrompt = state.values[name + '_prompt_neg'] ?? c.prompt_neg ?? '';
+    const posEmphasis = parseFloat(state.values[name + '_emphasis_pos'] ?? c.emphasis_pos ?? c.emphasis ?? 1);
+    const negEmphasis = parseFloat(state.values[name + '_emphasis_neg'] ?? c.emphasis_neg ?? c.emphasis ?? 1);
     const prefix = c.prefix ? escapeHtml(c.prefix) + ' ' : '';
     const postfix = c.postfix ? ' ' + escapeHtml(c.postfix) : '';
     const childHtml = exp ? '<div class="bpb-block-body">' +
       '<div class="bpb-dual-field">' +
         '<label class="bpb-mini-label">Positive' + (prefix || postfix ? ' (with affixes)' : '') + '</label>' +
         '<div class="bpb-inline-row">' +
-          '<input type="text" value="' + escapeHtml(posPrompt) + '" data-input="text" data-name="' + escapeHtml(name + '_pos') + '"/>' +
-          '<input type="number" min="0" step="0.1" value="' + posEmphasis + '" data-input="range" data-name="' + escapeHtml(name + '_pos_emphasis') + '" title="Emphasis (0 to omit)"/>' +
+          '<input type="text" value="' + escapeHtml(posPrompt) + '" data-input="text" data-name="' + escapeHtml(name + '_prompt_pos') + '"/>' +
+          '<input type="number" min="0" step="0.1" value="' + posEmphasis + '" data-input="range" data-name="' + escapeHtml(name + '_emphasis_pos') + '" title="Emphasis (0 to omit)"/>' +
         '</div>' +
       '</div>' +
       '<div class="bpb-dual-field">' +
         '<label class="bpb-mini-label">Negative' + (prefix || postfix ? ' (with affixes)' : '') + '</label>' +
         '<div class="bpb-inline-row">' +
-          '<input type="text" value="' + escapeHtml(negPrompt) + '" data-input="text" data-name="' + escapeHtml(name + '_neg') + '"/>' +
-          '<input type="number" min="0" step="0.1" value="' + negEmphasis + '" data-input="range" data-name="' + escapeHtml(name + '_neg_emphasis') + '" title="Emphasis (0 to omit)"/>' +
+          '<input type="text" value="' + escapeHtml(negPrompt) + '" data-input="text" data-name="' + escapeHtml(name + '_prompt_neg') + '"/>' +
+          '<input type="number" min="0" step="0.1" value="' + negEmphasis + '" data-input="range" data-name="' + escapeHtml(name + '_emphasis_neg') + '" title="Emphasis (0 to omit)"/>' +
         '</div>' +
       '</div>' +
     '</div>' : '';
