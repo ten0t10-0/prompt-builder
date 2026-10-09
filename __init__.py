@@ -176,6 +176,9 @@ try:
                 data = {'tabs': [], 'lists': getattr(ly, 'lists', {}) or {}}
                 for tab in (getattr(ly, 'tabs', []) or []):
                     tab_dict = {'name': getattr(tab, 'name', '')}
+                    # Flatten tab-level props (e.g. no_reset) like elements do
+                    if getattr(tab, 'data', None):
+                        tab_dict.update(tab.data)
                     if tab.children:
                         tab_dict['children'] = [elem_to_dict(c) for c in tab.children]
                     data['tabs'].append(tab_dict)

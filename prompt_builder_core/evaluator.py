@@ -134,8 +134,16 @@ class ElementBuilder:
         data = dict(getattr(elem, 'data', {}) or {})
         name = str(getattr(elem, 'name', ''))
         activated = data.pop('activated', False)
-        if state is not None and hasattr(state, 'activated') and name and name in state.activated:
-            activated = bool(state.activated[name])
+        if state is not None and hasattr(state, 'activated') and name:
+            # Panel state is authoritative: a missing key means deactivated
+            # (e.g. after Clear All empties the map), not "use layout default".
+            get = getattr(state.activated, 'get', None)
+            if callable(get):
+                activated = bool(get(name, False))
+            elif name in state.activated:
+                activated = bool(state.activated[name])
+            else:
+                activated = False
         etype = None
         if hasattr(elem, 'type') and elem.type:
             etype = elem.type

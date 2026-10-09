@@ -29,7 +29,7 @@ Arguments:
   --link: linked element name
   --n: is_negative (1/0)
   --add: is_additive (1/0)
-  --reset: is_reset_visible (1/0)
+  --reset: no_reset opt-out (1/0, inverted from legacy is_reset_visible)
   --x: ignore (1/0)
 
 Usage:
@@ -95,7 +95,7 @@ ARG_MAP = {
     'link': 'link',
     'n': 'is_negative',
     'add': 'is_additive',
-    'reset': 'is_reset_visible',
+    'reset': 'no_reset',
     'x': 'ignore',
 }
 
@@ -179,6 +179,13 @@ def parse_line(line: str) -> Optional[LayoutElement]:
         # LIST defines a list in the lists dict
         # We'll handle this separately
         pass
+
+    # Legacy --reset was opt-in display (is_reset_visible); the new schema
+    # uses opt-out no_reset, so invert: legacy visible -> omit the key.
+    if 'no_reset' in data:
+        data['no_reset'] = not data['no_reset']
+        if data['no_reset'] is False:
+            del data['no_reset']
     
     name = data.pop('name', None)
     if name == '':

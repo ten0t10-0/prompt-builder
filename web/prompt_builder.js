@@ -78,7 +78,7 @@ function createPanel() {
     '<span class="bpb-title">B Prompt Builder</span>' +
     '<div class="bpb-header-actions">' +
     '<button id="bpb-clear-all" title="Clear all selections">Clear All</button>' +
-    '<button id="bpb-reset" title="Reset to initial layout state">Reset</button>' +
+    '<button id="bpb-reset" title="Reset all to initial layout state">Reset All</button>' +
     '</div>';
   
   // Scrollable content area
@@ -140,6 +140,75 @@ function clearAllSelections() {
     }
     evalState();
   });
+}
+
+// Collect base element names in a tab subtree (for tab-scoped reset/clear).
+// Mirrors the render traversal: threads the enclosing select name so
+// generated from_list item names match what the renderer produces.
+function collectTabNames(tab, tabId) {
+  const names = [];
+  const seen = new Set();
+  function add(n) {
+    if (n && !seen.has(n)) { seen.add(n); names.push(n); }
+  }
+  function walk(elements, currentSelectName) {
+    for (const el of (elements || [])) {
+      const type = ((el.type || '') + '').toLowerCase();
+      if (type === 'single' || type === 'dual' || type === 'edit' || type === 'edit_link') {
+        add(el.name || el.i || el.label);
+      } else if (type === 'select') {
+        walk(el.children, el.name || el.i || currentSelectName);
+      } else if (type === 'from_list') {
+        for (const opt of expandFromListOptions(el, currentSelectName, tabId)) add(opt.name);
+      } else if (el.children) {
+        walk(el.children, currentSelectName);
+      }
+    }
+  }
+  walk(tab.children, undefined);
+  return names;
+}
+
+// State value keys derived from a base element name.
+const BPB_VALUE_SUFFIXES = ['', '_prompt', '_emphasis', '_is_negative', '_prompt_pos', '_prompt_neg', '_emphasis_pos', '_emphasis_neg'];
+
+function resetTabScope(names) {
+  if (!initialLayoutState) return;
+  for (const base of names) {
+    if (base in initialLayoutState.activated) state.activated[base] = initialLayoutState.activated[base];
+    else delete state.activated[base];
+    if (base in initialLayoutState.expanded) state.expanded[base] = initialLayoutState.expanded[base];
+    else delete state.expanded[base];
+    for (const s of BPB_VALUE_SUFFIXES) {
+      const k = base + s;
+      if (k in initialLayoutState.values) state.values[k] = initialLayoutState.values[k];
+      else delete state.values[k];
+    }
+  }
+}
+
+function clearTabScope(names) {
+  for (const base of names) state.activated[base] = false;
+}
+
+// True when anything selectable in a subtree is currently activated.
+// Used to only show a select's clear button when there is something to clear.
+function subtreeHasActive(elements, currentSelectName, tabId) {
+  for (const el of (elements || [])) {
+    const type = ((el.type || '') + '').toLowerCase();
+    if (type === 'single' || type === 'dual' || type === 'edit' || type === 'edit_link') {
+      if (state.activated[el.name || el.i || el.label]) return true;
+    } else if (type === 'select') {
+      if (subtreeHasActive(el.children, el.name || el.i || currentSelectName, tabId)) return true;
+    } else if (type === 'from_list') {
+      for (const opt of expandFromListOptions(el, currentSelectName, tabId)) {
+        if (state.activated[opt.name]) return true;
+      }
+    } else if (el.children) {
+      if (subtreeHasActive(el.children, currentSelectName, tabId)) return true;
+    }
+  }
+  return false;
 }
 
 function getTabId(tab, parentId) {
@@ -216,6 +285,18 @@ function renderNestedContent(tabs, tabId) {
     // Schedule tab bar rendering
     setTimeout(() => renderTabs(tabChildren, subTabId), 0);
   }
+
+  // Tab-scoped actions at the bottom: Clear first, then Reset (matches
+  // the global header order), right-aligned, labeled with the tab name.
+  // Opt-out via no_reset (legacy is_reset_visible: false also hides).
+  const tabActionsHidden = tab.no_reset === true || tab.no_reset === 'true' || tab.is_reset_visible === false;
+  if (!tabActionsHidden) {
+    const tabLabel = escapeHtml(tab.name || 'Tab');
+    html += '<div class="bpb-tab-footer">' +
+      '<button data-action="tab-clear" title="Clear selections in ' + tabLabel + '">Clear ' + tabLabel + '</button>' +
+      '<button data-action="tab-reset" title="Reset ' + tabLabel + ' to initial state">Reset ' + tabLabel + '</button>' +
+    '</div>';
+  }
   
   cont.innerHTML = html;
   
@@ -231,6 +312,18 @@ function renderNestedContent(tabs, tabId) {
         renderNestedContent(tabs, tabId);
       } else if (act === 'toggle-expand') {
         state.expanded[name] = !state.expanded[name];
+        renderNestedContent(tabs, tabId);
+      } else if (act === 'tab-reset') {
+        const idx = state.active_tabs[tabId] || 0;
+        const currentTab = tabs[idx];
+        if (currentTab) resetTabScope(collectTabNames(currentTab, tabId));
+        scheduleEval();
+        renderNestedContent(tabs, tabId);
+      } else if (act === 'tab-clear') {
+        const idx = state.active_tabs[tabId] || 0;
+        const currentTab = tabs[idx];
+        if (currentTab) clearTabScope(collectTabNames(currentTab, tabId));
+        scheduleEval();
         renderNestedContent(tabs, tabId);
       } else if (act === 'clear-select') {
         // Find the select element recursively in the current tab's children
@@ -421,7 +514,11 @@ function renderElement(c, tabs, parentTabId, siblingTabs, currentSelectName) {
       children = [...children].sort((a, b) => String(a.display || a.name || '').localeCompare(String(b.display || b.name || '')));
     }
     const childHtml = exp ? '<div class="bpb-block-body">' + (children.map(x => x._fromList ? renderSingleRow(x.name, x.display, { prompt: x.prompt }) : renderElement(x,tabs,parentTabId, c.children, name)).join('')) + '</div>' : '';
-    return '<div class="bpb-block"><div class="bpb-block-head" data-action="toggle-expand" data-name="' + escapeHtml(name) + '"><b>' + escapeHtml(c.label||name) + '</b><span class="bpb-head-right"><span class="bpb-caret">' + (exp ? '▼' : '▶') + '</span><button class="bpb-clear-btn" data-action="clear-select" data-name="' + escapeHtml(name) + '" title="Clear all selections in this list">Clear</button></span></div>' + childHtml + '</div>';
+    // Icon clear button, only when something inside is actively selected.
+    const selectClearBtn = subtreeHasActive(c.children, name, parentTabId)
+      ? '<button class="bpb-clear-btn" data-action="clear-select" data-name="' + escapeHtml(name) + '" title="Clear selections in this list">×</button>'
+      : '';
+    return '<div class="bpb-block"><div class="bpb-block-head" data-action="toggle-expand" data-name="' + escapeHtml(name) + '"><b>' + escapeHtml(c.label||name) + '</b><span class="bpb-head-right"><span class="bpb-caret">' + (exp ? '▼' : '▶') + '</span>' + selectClearBtn + '</span></div>' + childHtml + '</div>';
   }
 if (type === 'single') {
     const name = c.name || c.i || c.label;
