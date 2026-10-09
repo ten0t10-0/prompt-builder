@@ -468,13 +468,17 @@
 }
 
 .bpb-preview {
+    display: block;
+    width: 100%;
+    resize: none;
     font-size: 13px;
+    font-family: monospace;
+    color: var(--fg-color, #eee);
     line-height: 1.35;
     word-break: break-word;
     white-space: pre-wrap;
     max-height: 84px;
     overflow: auto;
-    font-family: monospace;
     background: var(--comfy-input-bg, #333);
     padding: 3px 5px;
     border-radius: 3px;

@@ -60,8 +60,8 @@ async function evalState() {
       const j = await resp.json();
       const p = document.getElementById('bpb-pos');
       const n = document.getElementById('bpb-neg');
-      if (p) p.textContent = j.positive || '';
-      if (n) n.textContent = j.negative || '';
+      if (p) p.value = j.positive || '';
+      if (n) n.value = j.negative || '';
     }
   } catch (e) {}
 }
@@ -93,9 +93,9 @@ function createPanel() {
   footer.className = 'bpb-footer';
   footer.innerHTML =
     '<div class="bpb-preview-label">Positive:</div>' +
-    '<div id="bpb-pos" class="bpb-preview"></div>' +
+    '<textarea id="bpb-pos" class="bpb-preview" readonly rows="3" spellcheck="false"></textarea>' +
     '<div class="bpb-preview-label">Negative:</div>' +
-    '<div id="bpb-neg" class="bpb-preview"></div>';
+    '<textarea id="bpb-neg" class="bpb-preview" readonly rows="3" spellcheck="false"></textarea>';
   
   panel.appendChild(header);
   panel.appendChild(contentWrapper);
@@ -119,8 +119,8 @@ function resetToInitial() {
   if (initialLayoutState) {
     state.values = { ...initialLayoutState.values };
     state.activated = { ...initialLayoutState.activated };
-    state.expanded = { ...initialLayoutState.expanded };
-    state.active_tabs = { ...initialLayoutState.active_tabs };
+    // Layout chrome (active tab, expanded/collapsed) is intentionally left
+    // alone — Reset All restores prompt state, not navigation.
     // Re-render everything
     loadLayout().then(layout => {
       if (layout && layout.tabs) {
@@ -213,6 +213,186 @@ function subtreeHasActive(elements, currentSelectName, tabId) {
 
 function getTabId(tab, parentId) {
   return parentId ? parentId + '::' + (tab.name || 'tab') : (tab.name || 'root');
+}
+
+// ---------- presets ----------
+// A preset holds set children; each set mirrors the applicable params of one
+// target entry (matched by name), plus an explicit activated flag (default
+// true when absent). Select sets hold value children addressed by display
+// label (case-insensitive), each carrying single-like params + activated.
+// Modes: global (whole layout, unmentioned entries fully cleared), partial
+// (only mentioned entries; provided params applied, rest cleared to type
+// defaults), additive (only provided params written; explicit
+// activated:false switches off without touching params).
+// Type defaults (NOT layout defaults) are used whenever params are cleared.
+
+function scalarMirror(type) {
+  if (type === 'single') return [['prompt', '_prompt', ''], ['emphasis', '_emphasis', 1], ['is_negative', '_is_negative', false]];
+  if (type === 'dual') return [['prompt_pos', '_prompt_pos', ''], ['prompt_neg', '_prompt_neg', ''], ['emphasis_pos', '_emphasis_pos', 1], ['emphasis_neg', '_emphasis_neg', 1]];
+  if (type === 'edit') return [['edit', '', 0.5]];
+  return null;
+}
+
+function clearScalarState(base, mirror) {
+  state.activated[base] = false;
+  for (const [, suffix, def] of mirror) state.values[base + suffix] = def;
+}
+
+function applyScalarSet(base, setEl, mirror, clearRest) {
+  const explicitOff = setEl.activated != null && !setEl.activated;
+  for (const [k, suffix, def] of mirror) {
+    if (setEl[k] != null) state.values[base + suffix] = setEl[k];
+    else if (clearRest) state.values[base + suffix] = def;
+  }
+  state.activated[base] = !explicitOff;
+}
+
+function collectSelectOptions(selectEl, selName, tabId) {
+  const opts = [];
+  for (const ch of (selectEl.children || [])) {
+    const t = ((ch.type || '') + '').toLowerCase();
+    if (t === 'single') {
+      const n = ch.name || ch.i || ch.label;
+      if (n) opts.push({ stateName: n, display: n });
+    } else if (t === 'from_list') {
+      for (const o of expandFromListOptions(ch, selName, tabId)) opts.push({ stateName: o.name, display: o.display });
+    }
+  }
+  return opts;
+}
+
+function clearOptionState(opt) {
+  state.activated[opt.stateName] = false;
+  state.values[opt.stateName + '_prompt'] = '';
+  state.values[opt.stateName + '_emphasis'] = 1;
+  state.values[opt.stateName + '_is_negative'] = false;
+}
+
+function applySelectEntry(selectEl, selName, setEl, tabId, clearRest) {
+  const options = collectSelectOptions(selectEl, selName, tabId);
+  // Select-level activated:false, or a value-less set, fully clears all options.
+  const selectOff = !!(setEl && setEl.activated != null && !setEl.activated);
+  // First value wins per display label (case-insensitive).
+  const byDisplay = new Map();
+  if (!selectOff) {
+    for (const ch of ((setEl && setEl.children) || [])) {
+      if ((((ch.type || '') + '').toLowerCase()) !== 'value') continue;
+      const vn = ch.name || ch.i;
+      if (!vn) continue;
+      const lk = String(vn).toLowerCase();
+      if (!byDisplay.has(lk)) byDisplay.set(lk, ch);
+    }
+  }
+  if (selectOff || !byDisplay.size) {
+    for (const opt of options) clearOptionState(opt);
+    return;
+  }
+  for (const opt of options) {
+    const v = byDisplay.get(String(opt.display).toLowerCase());
+    if (!v) {
+      if (clearRest) clearOptionState(opt);
+      continue;
+    }
+    const optOff = v.activated != null && !v.activated;
+    if (v.prompt != null) state.values[opt.stateName + '_prompt'] = v.prompt;
+    else if (clearRest) state.values[opt.stateName + '_prompt'] = '';
+    if (v.emphasis != null) state.values[opt.stateName + '_emphasis'] = v.emphasis;
+    else if (clearRest) state.values[opt.stateName + '_emphasis'] = 1;
+    if (v.is_negative != null) state.values[opt.stateName + '_is_negative'] = v.is_negative;
+    else if (clearRest) state.values[opt.stateName + '_is_negative'] = false;
+    state.activated[opt.stateName] = !optOff;
+  }
+}
+
+function findPresetByName(tabs, name) {
+  for (const el of (tabs || [])) {
+    if ((((el.type || '') + '').toLowerCase()) === 'preset' && (el.name === name || el.i === name)) return el;
+    if (el.children) {
+      const found = findPresetByName(el.children, name);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function applyPreset(presetEl, tabs) {
+  const rawMode = String(presetEl.mode != null ? presetEl.mode : 'partial').toLowerCase();
+  const mode = rawMode === 'global' ? 'global' : rawMode === 'additive' ? 'additive' : 'partial';
+  const clearRest = mode !== 'additive';
+  // First set wins per target entry.
+  const setMap = {};
+  for (const ch of (presetEl.children || [])) {
+    if ((((ch.type || '') + '').toLowerCase()) !== 'set') continue;
+    const k = ch.name || ch.i;
+    if (k && !(k in setMap)) setMap[k] = ch;
+  }
+  function lookup(el) {
+    const k = el.name || el.i || el.label;
+    return (k && setMap[k]) || null;
+  }
+  // Walk tab pages (all of them, not just active); tabId threading mirrors
+  // the renderer so standalone from_list fallbacks resolve identically.
+  function walkTabs(tabsArr, tabId) {
+    for (const tab of (tabsArr || [])) {
+      walkContents(tab.children, undefined, tabId);
+      const tabKids = (tab.children || []).filter(c => (((c.type || '') + '').toLowerCase()) === 'tab');
+      if (tabKids.length) walkTabs(tabKids, tabId + '::subtabs');
+    }
+  }
+  function walkContents(elements, currentSelectName, tabId) {
+    for (const el of (elements || [])) {
+      const type = ((el.type || '') + '').toLowerCase();
+      if (type === 'preset' || type === 'set' || type === 'value') continue;
+      if (type === 'tab') {
+        const nonTabs = (el.children || []).filter(c => (((c.type || '') + '').toLowerCase()) !== 'tab');
+        walkContents(nonTabs, currentSelectName, tabId);
+        const nested = (el.children || []).filter(c => (((c.type || '') + '').toLowerCase()) === 'tab');
+        if (nested.length) walkTabs(nested, tabId + '::' + (el.name || 'tab') + '::subtabs');
+        continue;
+      }
+      if (type === 'single' || type === 'dual' || type === 'edit') {
+        const key = el.name || el.i || el.label;
+        if (!key) continue;
+        const set = lookup(el);
+        const mirror = scalarMirror(type);
+        if (set) applyScalarSet(key, set, mirror, clearRest);
+        else if (mode === 'global') clearScalarState(key, mirror);
+      } else if (type === 'edit_link') {
+        // Only activation control is applicable; other keys are ignored.
+        const key = el.name || el.i || el.label;
+        if (!key) continue;
+        const set = lookup(el);
+        if (set && set.activated != null) state.activated[key] = !!set.activated;
+        else if (mode === 'global' && !set) state.activated[key] = false;
+      } else if (type === 'select') {
+        const selName = el.name || el.i;
+        if (selName) {
+          const set = setMap[selName] || null;
+          if (set) applySelectEntry(el, selName, set, tabId, clearRest);
+          else if (mode === 'global') applySelectEntry(el, selName, null, tabId, true);
+        }
+        // Recurse into nested containers only (direct options handled above).
+        for (const ch of (el.children || [])) {
+          const ct = ((ch.type || '') + '').toLowerCase();
+          if (ct === 'single' || ct === 'from_list' || ct === 'value' || ct === 'set') continue;
+          if (ch.children) walkContents([ch], selName, tabId);
+        }
+      } else if (type === 'from_list') {
+        // Standalone list options: only global touches them (sets can't address them).
+        if (mode === 'global') {
+          for (const o of expandFromListOptions(el, currentSelectName, tabId)) {
+            state.activated[o.name] = false;
+            state.values[o.name + '_prompt'] = '';
+            state.values[o.name + '_emphasis'] = 1;
+            state.values[o.name + '_is_negative'] = false;
+          }
+        }
+      } else if (el.children) {
+        walkContents(el.children, currentSelectName, tabId);
+      }
+    }
+  }
+  walkTabs(tabs, 'root');
 }
 
 function renderTabs(tabs, parentId = null, isSubTabs = false) {
@@ -325,6 +505,19 @@ function renderNestedContent(tabs, tabId) {
         if (currentTab) clearTabScope(collectTabNames(currentTab, tabId));
         scheduleEval();
         renderNestedContent(tabs, tabId);
+      } else if (act === 'preset') {
+        // Presets can target the whole layout, so reload it fresh and
+        // re-render everything after patching state.
+        loadLayout().then(layout => {
+          if (layout && layout.tabs) {
+            window.__prompt_builder_lists = layout.lists || {};
+            window.__prompt_builder_layout = layout;
+            const presetEl = findPresetByName(layout.tabs, name);
+            if (presetEl) applyPreset(presetEl, layout.tabs);
+            renderTabs(layout.tabs);
+          }
+          evalState();
+        });
       } else if (act === 'clear-select') {
         // Find the select element recursively in the current tab's children
         const activeIdx = state.active_tabs[tabId] || 0;
@@ -609,6 +802,7 @@ function initPanel(panel) {
   loadLayout().then(layout => {
     if (layout && layout.tabs) {
       window.__prompt_builder_lists = layout.lists || {};
+      window.__prompt_builder_layout = layout;
       
       function collectActivated(elements) {
         for (const el of elements) {
@@ -621,6 +815,22 @@ function initPanel(panel) {
       }
       for (const tab of layout.tabs) {
         if (tab.children) collectActivated(tab.children);
+      }
+
+      // Seed initial expand/collapse from the open param (absent = type
+      // default: group/accordion expanded, select/dual collapsed).
+      function collectOpen(elements) {
+        for (const el of (elements || [])) {
+          const t = ((el.type || '') + '').toLowerCase();
+          const n = el.name || el.i || el.label;
+          if (n && (t === 'group' || t === 'accordion' || t === 'select' || t === 'dual') && el.open != null) {
+            state.expanded[n] = !!el.open;
+          }
+          if (el.children) collectOpen(el.children);
+        }
+      }
+      for (const tab of layout.tabs) {
+        if (tab.children) collectOpen(tab.children);
       }
       
       // Capture initial state for reset functionality

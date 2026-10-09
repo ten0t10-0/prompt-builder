@@ -186,6 +186,9 @@ def parse_line(line: str) -> Optional[LayoutElement]:
         data['no_reset'] = not data['no_reset']
         if data['no_reset'] is False:
             del data['no_reset']
+    # Legacy presets used an additive flag; the new schema uses mode.
+    if yaml_type == 'preset' and 'is_additive' in data:
+        data['mode'] = 'additive' if data.pop('is_additive') else 'global'
     
     name = data.pop('name', None)
     if name == '':

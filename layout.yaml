@@ -7,112 +7,94 @@ lists:
     - Green
     - Black
     - White
+  finishes:
+    - Matte
+    - Glossy
+    - Metallic
+  places:
+    - Studio
+    - Forest
+    - Street
 
 tabs:
-  - name: Meta
+  # Preset buttons live here. Footer hidden via no_reset (opt-out demo).
+  - name: Presets
     type: tab
+    no_reset: true
     children:
-      - type: select
-        name: Artists
-        prefix: by
+      - type: preset
+        name: Portrait Base
+        mode: global
         children:
-          - type: single
-            name: Some artist
-            prompt: some artist
-      - type: select
-        name: Theme
-        sort: false
+          - type: set
+            name: Subject
+            prompt: 1girl
+          - type: set
+            name: Lighting
+            edit: 0.8
+          - type: set
+            name: Wardrobe
+            children:
+              - type: value
+                name: Black clothes
+      - type: preset
+        name: Quick Polish
+        mode: partial
         children:
-          - type: single
-            name: Medieval
-            prompt: medieval
+          - type: set
+            name: Detail
+            prompt: highly detailed
+            emphasis: 1.1
+          - type: set
+            name: Palette Link
             activated: true
-          - type: single
-            name: Fantasy
-            prompt: fantasy
-            activated: true
-          - type: single
-            name: Cyberpunk
-            prompt: cyberpunk
-      - type: tab
-        name: Style Options
+          - type: set
+            name: Wardrobe
+            children:
+              - type: value
+                name: Formal
+                emphasis: 1.2
+      - type: preset
+        name: Warm Shift
+        mode: additive
         children:
-          - type: row
-            children:
-              - type: column
-                scale: 2
-                children:
-                  - type: edit
-                    name: Style
-                    prompt_a: flat color
-                    prompt_b: anime coloring
-                    edit: 0.7
-              - type: column
-                scale: 3
-                children:
-                  - type: edit_link
-                    name: Coloring (Linked - Style)
-                    link: Style
-                    prompt_a: muted color
-                    prompt_b: colorful
-          - type: tab
-            name: Advanced Style
-            children:
-              - type: edit
-                name: Texture
-                prompt_a: smooth
-                prompt_b: grainy
-                edit: 0.3
-              - type: edit
-                name: Lighting
-                prompt_a: soft
-                prompt_b: dramatic
-                edit: 0.5
-      - type: tab
-        name: Test prompts
-        children:
-          - type: row
-            children:
-              - type: column
-                scale: 2
-                children:
-                  - type: single
-                    name: Prompt 1
-                    prompt: prompt 1
-              - type: column
-                scale: 2
-                children:
-                  - type: single
-                    name: Prompt 2
-                    prompt: prompt 2
+          - type: set
+            name: Lighting
+            edit: 0.9
+          - type: set
+            name: Skin Tone
+            prompt: warm skin
 
-  - name: People
+  - name: Subject
     type: tab
     children:
       - type: single
-        name: Single prompt
-        prompt: 1boy
-        emphasis: 1
+        name: Subject
+        prompt: 1girl
         activated: true
+      - type: single
+        name: Detail
+        prompt: detailed
       - type: separator
       - type: edit
-        name: Skin shade
-        prompt_a: dark
-        prompt_b: pale
+        name: Skin Tone
+        prompt_a: pale skin
+        prompt_b: tanned skin
         edit: 0.4
-        postfix: skin
-      - type: separator
       - type: dual
-        name: Hair style
-        prompt_pos: low ponytail
+        name: Hair
+        prompt_pos: long hair
         prompt_neg: short hair
         emphasis_neg: 0.8
+        postfix: hairstyle
       - type: separator
+      # Default sorted select: list options interleave with singles.
       - type: select
-        name: Clothing
+        name: Wardrobe
+        open: true
         children:
           - type: from_list
-            name: Colors
+            name: colors
             postfix: clothes
           - type: single
             name: Formal
@@ -120,3 +102,117 @@ tabs:
           - type: single
             name: Overalls
             prompt: overalls
+      # sort:false keeps layout order; list items stay sorted in place.
+      - type: select
+        name: Footwear
+        sort: false
+        children:
+          - type: single
+            name: Boots
+            prompt: boots
+          - type: single
+            name: Sneakers
+            prompt: sneakers
+          - type: single
+            name: Sandals
+            prompt: sandals
+      - type: select
+        name: Finish
+        children:
+          - type: from_list
+            name: finishes
+
+  - name: Style
+    type: tab
+    children:
+      # Accordion expanded by default (open defaults to true).
+      - type: accordion
+        name: Color
+        children:
+          - type: edit
+            name: Palette
+            prompt_a: muted colors
+            prompt_b: vivid colors
+            edit: 0.6
+          - type: edit_link
+            name: Palette Link
+            link: Palette
+            prompt_a: soft tones
+            prompt_b: bold tones
+      - type: accordion
+        name: Texture
+        open: false
+        children:
+          - type: edit
+            name: Grain
+            prompt_a: smooth
+            prompt_b: grainy
+            edit: 0.3
+          - type: single
+            name: Vignette
+            prompt: vignette
+      - type: group
+        name: Framing
+        children:
+          - type: dual
+            name: Composition
+            prompt_pos: centered composition
+            prompt_neg: cropped edges
+          # Negative single: lands in the negative prompt when active.
+          - type: single
+            name: Watermark
+            prompt: watermark
+            is_negative: true
+            activated: true
+      - type: separator
+      # Nested sub-tab with a row/column layout inside.
+      - type: tab
+        name: Advanced
+        children:
+          - type: row
+            children:
+              - type: column
+                children:
+                  - type: edit
+                    name: Depth
+                    prompt_a: shallow depth
+                    prompt_b: deep depth
+                    edit: 0.5
+              - type: column
+                children:
+                  - type: edit
+                    name: Motion
+                    prompt_a: static
+                    prompt_b: dynamic
+                    edit: 0.5
+
+  - name: Scene
+    type: tab
+    children:
+      # Select-level prefix applies to every option prompt.
+      - type: select
+        name: Backdrop
+        prefix: in
+        children:
+          - type: from_list
+            name: places
+      - type: dual
+        name: Weather
+        prompt_pos: sunny
+        prompt_neg: rainy
+        prefix: outdoor
+      - type: single
+        name: Cinematic
+        prompt: cinematic lighting
+        emphasis: 1.1
+      - type: separator
+      - type: edit
+        name: Lighting
+        prompt_a: soft light
+        prompt_b: harsh light
+        edit: 0.5
+      - type: edit
+        name: Time
+        prompt_a: morning light
+        prompt_b: night lights
+        edit: 0.5
