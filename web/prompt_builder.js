@@ -611,6 +611,15 @@ function getListItems(listName) {
 // Expand a from_list element into single-like options.
 // Always sorted alphabetically by display label so list options
 // interleave deterministically with normal singles.
+// Code-point ordering (matches the legacy app): '(' sorts before '-',
+// unlike localeCompare, whose ICU collation reorders punctuation.
+function compareLabels(a, b) {
+  const sa = String(a), sb = String(b);
+  if (sa < sb) return -1;
+  if (sa > sb) return 1;
+  return 0;
+}
+
 function toTitleCase(s) {
   return String(s).toLowerCase().replace(/(?:^|\s)\S/g, c => c.toUpperCase());
 }
@@ -628,7 +637,7 @@ function expandFromListOptions(c, parentSelectName, parentTabId) {
     prompt: String(item).toLowerCase(),
     _fromList: true
   }));
-  opts.sort((a, b) => String(a.display).localeCompare(String(b.display)));
+  opts.sort((a, b) => compareLabels(a.display, b.display));
   return opts;
 }
 
@@ -714,7 +723,7 @@ function renderElement(c, tabs, parentTabId, siblingTabs, currentSelectName) {
       }
     }
     if (sortChildren) {
-      children = [...children].sort((a, b) => String(a.display || a.name || '').localeCompare(String(b.display || b.name || '')));
+      children = [...children].sort((a, b) => compareLabels(a.display || a.name || '', b.display || b.name || ''));
     }
     const childHtml = exp ? '<div class="bpb-block-body">' + (children.map(x => x._fromList ? renderSingleRow(x.name, x.display, { prompt: x.prompt }) : renderElement(x,tabs,parentTabId, c.children, name)).join('')) + '</div>' : '';
     // Icon clear button, only when something inside is actively selected.
