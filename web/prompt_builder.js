@@ -224,12 +224,15 @@ function getTabId(tab, parentId) {
 // (only mentioned entries; provided params applied, rest cleared to type
 // defaults), additive (only provided params written; explicit
 // activated:false switches off without touching params).
+// Value prompt text is excluded from presets entirely (it is derived from
+// the option); global/partial restores the initial prompt instead of
+// blanking it. Standalone singles/duals still clear to blank.
 // Type defaults (NOT layout defaults) are used whenever params are cleared.
 
 function scalarMirror(type) {
   if (type === 'single') return [['prompt', '_prompt', ''], ['emphasis', '_emphasis', 1], ['is_negative', '_is_negative', false]];
   if (type === 'dual') return [['prompt_pos', '_prompt_pos', ''], ['prompt_neg', '_prompt_neg', ''], ['emphasis_pos', '_emphasis_pos', 1], ['emphasis_neg', '_emphasis_neg', 1]];
-  if (type === 'edit') return [['edit', '', 0.5]];
+  if (type === 'edit') return [['edit', '', 0.5], ['is_negative', '_is_negative', false]];
   return null;
 }
 
@@ -253,9 +256,9 @@ function collectSelectOptions(selectEl, selName, tabId) {
     const t = ((ch.type || '') + '').toLowerCase();
     if (t === 'single') {
       const n = ch.name || ch.i || ch.label;
-      if (n) opts.push({ stateName: n, display: n });
+      if (n) opts.push({ stateName: n, display: n, initialPrompt: ch.prompt ?? '' });
     } else if (t === 'from_list') {
-      for (const o of expandFromListOptions(ch, selName, tabId)) opts.push({ stateName: o.name, display: o.display });
+      for (const o of expandFromListOptions(ch, selName, tabId)) opts.push({ stateName: o.name, display: o.display, initialPrompt: o.prompt ?? '' });
     }
   }
   return opts;
@@ -263,7 +266,9 @@ function collectSelectOptions(selectEl, selName, tabId) {
 
 function clearOptionState(opt) {
   state.activated[opt.stateName] = false;
-  state.values[opt.stateName + '_prompt'] = '';
+  // Restores the initial prompt (never blank): presets must not corrupt
+  // option text, which is derived from the option itself.
+  state.values[opt.stateName + '_prompt'] = opt.initialPrompt ?? '';
   state.values[opt.stateName + '_emphasis'] = 1;
   state.values[opt.stateName + '_is_negative'] = false;
 }
@@ -294,8 +299,9 @@ function applySelectEntry(selectEl, selName, setEl, tabId, clearRest) {
       continue;
     }
     const optOff = v.activated != null && !v.activated;
-    if (v.prompt != null) state.values[opt.stateName + '_prompt'] = v.prompt;
-    else if (clearRest) state.values[opt.stateName + '_prompt'] = '';
+    // NOTE: value prompt is excluded by design — presets never rewrite option
+    // text. Global/partial restores the initial prompt; additive leaves it.
+    if (clearRest) state.values[opt.stateName + '_prompt'] = opt.initialPrompt ?? '';
     if (v.emphasis != null) state.values[opt.stateName + '_emphasis'] = v.emphasis;
     else if (clearRest) state.values[opt.stateName + '_emphasis'] = 1;
     if (v.is_negative != null) state.values[opt.stateName + '_is_negative'] = v.is_negative;
@@ -382,7 +388,7 @@ function applyPreset(presetEl, tabs) {
         if (mode === 'global') {
           for (const o of expandFromListOptions(el, currentSelectName, tabId)) {
             state.activated[o.name] = false;
-            state.values[o.name + '_prompt'] = '';
+            state.values[o.name + '_prompt'] = o.prompt ?? '';
             state.values[o.name + '_emphasis'] = 1;
             state.values[o.name + '_is_negative'] = false;
           }
@@ -605,6 +611,9 @@ function getListItems(listName) {
 // Expand a from_list element into single-like options.
 // Always sorted alphabetically by display label so list options
 // interleave deterministically with normal singles.
+function toTitleCase(s) {
+  return String(s).toLowerCase().replace(/(?:^|\s)\S/g, c => c.toUpperCase());
+}
 function expandFromListOptions(c, parentSelectName, parentTabId) {
   const listName = c.name || c.i;
   const postfix = c.postfix || '';
@@ -614,7 +623,8 @@ function expandFromListOptions(c, parentSelectName, parentTabId) {
   const opts = (items || []).map(item => ({
     type: 'single',
     name: selectName + '_' + listName + safePostfix + '_' + item,
-    display: String(item) + (postfix ? ' ' + postfix : ''),
+    // Display-only: "{postfix} - {item}" in Title Case. Prompt untouched.
+    display: toTitleCase(postfix ? postfix + ' - ' + item : item),
     prompt: String(item).toLowerCase(),
     _fromList: true
   }));
@@ -755,10 +765,11 @@ if (type === 'single') {
     const isLinked = type === 'edit_link';
     // Use 'edit' from layout as default, not 'default'
     const val = state.values[name] != null ? state.values[name] : (c.edit != null ? c.edit : (c.default != null ? c.default : 0.5));
+    const isNegative = state.values[name + '_is_negative'] ?? c.is_negative ?? false;
     const prefix = c.prefix ? escapeHtml(c.prefix) + ' ' : '';
     const postfix = c.postfix ? ' ' + escapeHtml(c.postfix) : '';
     const rangeText = prefix + '[range: ' + escapeHtml(c.prompt_a||'') + ' → ' + escapeHtml(c.prompt_b||'') + ']' + postfix;
-    const linkText = isLinked ? 'Controlled by: ' + escapeHtml(c.link || 'unknown') : '';
+    const linkText = isLinked ? 'Controlled by: ' + escapeHtml(c.link || 'unknown') + ' (follows value and negative)' : '';
     const tooltipText = isLinked 
       ? escapeHtml(rangeText + '\n' + linkText)
       : escapeHtml(rangeText);
@@ -774,6 +785,10 @@ if (type === 'single') {
       html += '<div class="bpb-slider-row">';
       html += '<input type="range" min="0" max="1" step="0.1" value="' + val + '" data-input="range" data-name="' + escapeHtml(name) + '"/>';
       html += '<span id="v-' + escapeHtml(name) + '" class="bpb-val">' + val + '</span>';
+      html += '<label class="bpb-neg-toggle" title="Toggle negative prompt">' +
+        '<input type="checkbox" ' + (isNegative?'checked':'') + ' data-input="checkbox" data-name="' + escapeHtml(name + '_is_negative') + '"/>' +
+        '<span>N</span>' +
+      '</label>';
       html += '</div>';
       html += '</div>';
     }

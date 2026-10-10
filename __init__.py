@@ -115,6 +115,9 @@ class PromptBuilderNode:
                         linked_data = elem_data_map[link_name]
                         if linked_data and 'edit' in linked_data and 'edit' not in elem.data:
                             elem.data['edit'] = linked_data['edit']
+                        # Negative follows the source; inherit its layout default too
+                        if linked_data and 'is_negative' in linked_data and 'is_negative' not in elem.data:
+                            elem.data['is_negative'] = linked_data['is_negative']
                 pe = evaluator.ElementBuilder.from_element(elem, st, lists=lists)
                 if pe.activated:
                     active.append(pe)

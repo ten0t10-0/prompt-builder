@@ -174,6 +174,12 @@ class ElementBuilder:
                 state_key = name + '_' + k
                 if state_key in state.values:
                     data[k] = state.values[state_key]
+        # For edit, read the negative flag from state (e.g. set by presets;
+        # the panel row itself has no N toggle). Slider value handled above.
+        if etype == 'edit' and state is not None and hasattr(state, 'values'):
+            state_key = name + '_is_negative'
+            if state_key in state.values:
+                data['is_negative'] = state.values[state_key]
         # For edit_link, read linked element's edit value from state OR from element's own data
         if etype == 'edit_link':
             link_name = data.get('link')
@@ -187,6 +193,12 @@ class ElementBuilder:
             elif 'edit' not in data and link_name:
                 # Could look up the linked element's data here if needed
                 pass
+            # Negative follows the linked source (read-through, like the value):
+            # linked entries have no independent negative flag.
+            if link_name and state is not None and hasattr(state, 'values'):
+                src_neg_key = link_name + '_is_negative'
+                if src_neg_key in state.values:
+                    data['is_negative'] = state.values[src_neg_key]
         return PromptElement(name=name, activated=activated, **data)
 
 

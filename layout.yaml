@@ -36,7 +36,7 @@ tabs:
             name: Wardrobe
             children:
               - type: value
-                name: Black clothes
+                name: Clothes - Black
       - type: preset
         name: Quick Polish
         mode: partial
