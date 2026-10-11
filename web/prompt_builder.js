@@ -45,28 +45,43 @@ function scheduleEval() {
   evalTimer = setTimeout(evalState, 150);
 }
 
-async function evalState() {
+async function evalState(retry) {
+  try { writeWidgetFromPanel(); } catch (e) {}
   try {
-    // Push state to backend for node to pick up
+    // Push state to backend for node to pick up (also runs unbound so the
+    // shared mirror never goes stale).
     await fetch('/extensions/prompt-builder/state', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ state: state })
     });
-
+  } catch (e) {}
+  // Unbound (no node in this workflow): no output exists, so keep the
+  // previews cleared instead of evaluating layout defaults.
+  if (bpbBoundNodeId == null) {
+    const p0 = document.getElementById('bpb-pos');
+    const n0 = document.getElementById('bpb-neg');
+    if (p0) p0.value = '';
+    if (n0) n0.value = '';
+    return;
+  }
+  try {
     const resp = await fetch('/extensions/prompt-builder/eval', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ state: JSON.stringify(state) })
     });
-    if (resp.ok) {
-      const j = await resp.json();
-      const p = document.getElementById('bpb-pos');
-      const n = document.getElementById('bpb-neg');
-      if (p) p.value = j.positive || '';
-      if (n) n.value = j.negative || '';
-    }
-  } catch (e) {}
+    if (!resp.ok) throw new Error('eval failed: ' + resp.status);
+    const j = await resp.json();
+    const p = document.getElementById('bpb-pos');
+    const n = document.getElementById('bpb-neg');
+    if (p) p.value = j.positive || '';
+    if (n) n.value = j.negative || '';
+  } catch (e) {
+    // A failed eval leaves stale/empty previews with no recovery trigger,
+    // so retry once (e.g. server busy during workflow load).
+    if (!retry) setTimeout(() => { try { evalState(true); } catch (e2) {} }, 1000);
+  }
 }
 
 function createPanel() {
@@ -78,7 +93,7 @@ function createPanel() {
   const header = document.createElement('div');
   header.className = 'bpb-header';
   header.innerHTML = 
-    '<span class="bpb-title">B Prompt Builder</span>' +
+    '<span class="bpb-title">B Prompt Builder<span id="bpb-bound-label" class="bpb-bound-label"></span></span>' +
     '<div class="bpb-header-actions">' +
     '<button id="bpb-clear-all" title="Clear all selections">Clear All</button>' +
     '<button id="bpb-reset" title="Reset all to initial layout state">Reset All</button>' +
@@ -89,7 +104,8 @@ function createPanel() {
   contentWrapper.className = 'bpb-content-wrap';
   contentWrapper.innerHTML =
     '<div id="bpb-tabs"></div>' +
-    '<div id="bpb-content"></div>';
+    '<div id="bpb-content"></div>' +
+    '<div id="bpb-nobind" class="bpb-empty-note" style="display:none">No Prompt Builder node found in this workflow.<br>Add one from the node menu to start building prompts.</div>';
   
   // Sticky footer with prompt previews
   const footer = document.createElement('div');
@@ -194,39 +210,20 @@ function clearTabScope(names) {
   for (const base of names) state.activated[base] = false;
 }
 
-// True when anything selectable in a subtree is currently activated.
-// Used to only show a select's clear button when there is something to clear.
-function subtreeHasActive(elements, currentSelectName, tabId) {
-  for (const el of (elements || [])) {
-    const type = ((el.type || '') + '').toLowerCase();
-    if (type === 'single' || type === 'dual' || type === 'edit' || type === 'edit_link') {
-      if (state.activated[el.name || el.i || el.label]) return true;
-    } else if (type === 'select') {
-      if (subtreeHasActive(el.children, el.name || el.i || currentSelectName, tabId)) return true;
-    } else if (type === 'from_list') {
-      for (const opt of expandFromListOptions(el, currentSelectName, tabId)) {
-        if (state.activated[opt.name]) return true;
-      }
-    } else if (el.children) {
-      if (subtreeHasActive(el.children, currentSelectName, tabId)) return true;
-    }
-  }
-  return false;
-}
-
-// Count of activated options in a select subtree (for the closed summary).
-function countSelectActive(selectEl, selName, tabId) {
-  let n = 0;
+// Activation stats for a select subtree in one walk: whether anything is
+// active (clear-button visibility) and how many (closed summary).
+function selectActiveStats(selectEl, selName, tabId) {
+  const stats = { has: false, count: 0 };
   function walk(elements, currentSelectName) {
     for (const el of (elements || [])) {
       const type = ((el.type || '') + '').toLowerCase();
       if (type === 'single' || type === 'dual' || type === 'edit' || type === 'edit_link') {
-        if (state.activated[el.name || el.i || el.label]) n++;
+        if (state.activated[el.name || el.i || el.label]) { stats.has = true; stats.count++; }
       } else if (type === 'select') {
         walk(el.children, el.name || el.i || currentSelectName);
       } else if (type === 'from_list') {
         for (const opt of expandFromListOptions(el, currentSelectName, tabId)) {
-          if (state.activated[opt.name]) n++;
+          if (state.activated[opt.name]) { stats.has = true; stats.count++; }
         }
       } else if (el.children) {
         walk(el.children, currentSelectName);
@@ -234,11 +231,7 @@ function countSelectActive(selectEl, selName, tabId) {
     }
   }
   walk(selectEl.children, selName);
-  return n;
-}
-
-function getTabId(tab, parentId) {
-  return parentId ? parentId + '::' + (tab.name || 'tab') : (tab.name || 'root');
+  return stats;
 }
 
 // ---------- presets ----------
@@ -427,7 +420,272 @@ function applyPreset(presetEl, tabs) {
   walkTabs(tabs, 'root');
 }
 
-function renderTabs(tabs, parentId = null, isSubTabs = false) {
+// ---------- per-workflow node binding ----------
+// Panel state persists per PromptBuilder node via a hidden BPB_STATE widget
+// (serialized into the workflow JSON). The panel binds to a single node per
+// workflow tab: the graph-remembered node if still present, else the first
+// node found (top level first, then subgraph interiors). No selection
+// following: clicking nodes never rebinds. Panel edits stream into the bound
+// widget continuously, and binding (re)loads the widget, so tab switches are
+// lossless. Multi-node workflows show the first node; per-node panel tabs
+// remain a possible future step (they'd need rename tracking).
+let bpbBoundNodeId = null;
+const bpbGraphBinding = new Map(); // LGraph -> node id
+let bpbPanelReady = false;
+let bpbDirtyTimer = null;
+let bpbBindSeq = 0;
+let bpbWidgetApplied = false;
+
+function bpbGraphNodeList(graph) {
+  // Version-proof, subgraph-aware enumeration from the graph root.
+  // Subgraph interiors are NOT in the top-level list, so recurse via
+  // node.subgraph (official walkGraph pattern). Depth-first, top level
+  // first, cycle-guarded. NOTE: node ids are local per graph level, so a
+  // first id match wins by walk order.
+  const out = [];
+  const seenGraphs = new Set();
+  function walk(g) {
+    if (!g || seenGraphs.has(g)) return;
+    seenGraphs.add(g);
+    let level = [];
+    try {
+      const src = g.nodes != null ? g.nodes : g._nodes;
+      if (!src) return;
+      if (Array.isArray(src)) level = src.filter(n => n);
+      else if (typeof src.values === 'function') { for (const n of src.values()) if (n) level.push(n); }
+      else { for (const k of Object.keys(src)) { const n = src[k]; if (n) level.push(n); } }
+    } catch (e) { return; }
+    for (const n of level) {
+      out.push(n);
+      try { if (n.subgraph) walk(n.subgraph); } catch (e) {}
+    }
+  }
+  try { walk(graph || app.graph); } catch (e) {}
+  return out;
+}
+
+function bpbFindNodeById(graph, id) {
+  try {
+    const g = graph || app.graph;
+    if (g && typeof g.getNodeById === 'function') {
+      const n = g.getNodeById(id);
+      if (n) return n;
+    }
+  } catch (e) {}
+  const list = bpbGraphNodeList(graph);
+  for (const n of list) {
+    try { if (n && n.id === id) return n; } catch (e) {}
+  }
+  return null;
+}
+
+function bpbFindNodes(graph) {
+  return bpbGraphNodeList(graph).filter(n => n && n.type === 'PromptBuilderNode');
+}
+
+function bpbGetWidget(node) {
+  if (!node || !node.widgets) return null;
+  for (const w of node.widgets) {
+    if (w && w.name === 'state') return w;
+  }
+  return null;
+}
+
+function chooseBindingForGraph(graph) {
+  const nodes = bpbFindNodes(graph);
+  if (!nodes.length) return null;
+  try {
+    const remembered = bpbGraphBinding.get(graph);
+    if (remembered != null) {
+      for (const n of nodes) if (n.id === remembered) return remembered;
+    }
+  } catch (e) {}
+  return nodes[0].id;
+}
+
+// Rebind only when the target differs: keeps repeated graph-configured
+// events and polls from repainting a settled panel.
+function rebindIfChanged() {
+  try {
+    if (!bpbPanelReady || !app.graph) return;
+    const id = chooseBindingForGraph(app.graph);
+    if (id !== bpbBoundNodeId) bindPanelToNode(id);
+  } catch (e) {}
+}
+
+// Self-healer: if bound but the tab bar never painted (e.g. a transient
+// fetch failure or mid-load ordering on workflow open), re-render once.
+// Skips entirely while the panel is detached (nothing could paint anyway).
+function ensurePanelPainted() {
+  try {
+    if (!bpbPanelReady || bpbBoundNodeId == null) return;
+    const tabsEl = document.getElementById('bpb-tabs');
+    if (!tabsEl) return;
+    const knownTabs = (window.__prompt_builder_layout && window.__prompt_builder_layout.tabs) || [];
+    if (!knownTabs.length) return;
+    if (tabsEl.querySelector('.bpb-tabbar')) return;
+    loadLayout().then(layout => {
+      if (layout && layout.tabs) {
+        window.__prompt_builder_lists = layout.lists || {};
+        window.__prompt_builder_layout = layout;
+        renderTabs(layout.tabs);
+      }
+      evalState();
+    });
+  } catch (e) {}
+}
+
+// Runs on EVERY sidebar open (not just the first): the tab DOM is mounted
+// lazily, so reconcile visibility + paint against current binding state,
+// then refresh the previews so the footer can never show stale content.
+function syncPanelToDom() {
+  try {
+    refreshPanelBinding();
+    ensurePanelPainted();
+    evalState();
+  } catch (e) {}
+}
+
+function serializePanelState() {
+  return JSON.stringify({ values: state.values, activated: state.activated, expanded: state.expanded });
+}
+
+function markBpbDirty() {
+  // Same signal core widget edits produce (dirty indicator + auto-queue);
+  // saving itself always reads live widget values regardless.
+  try {
+    if (app.configuringGraph) return;
+  } catch (e) {}
+  if (bpbDirtyTimer) return;
+  bpbDirtyTimer = setTimeout(() => {
+    bpbDirtyTimer = null;
+    try {
+      const payload = app.graph.serialize();
+      if (app.api && typeof app.api.dispatchCustomEvent === 'function') {
+        app.api.dispatchCustomEvent('graphChanged', payload);
+      } else if (app.api && typeof app.api.dispatchEvent === 'function') {
+        app.api.dispatchEvent(new CustomEvent('graphChanged', { detail: payload }));
+      }
+    } catch (e) {}
+  }, 200);
+}
+
+function writeWidgetFromPanel() {
+  if (bpbBoundNodeId == null || !app.graph) return;
+  let node = null;
+  try { node = bpbFindNodeById(app.graph, bpbBoundNodeId); } catch (e) { return; }
+  if (!node || node.type !== 'PromptBuilderNode') return;
+  const widget = bpbGetWidget(node);
+  if (!widget) return;
+  const json = serializePanelState();
+  try {
+    if (widget.value !== json) widget.value = json; // setter routes via setValue + callback(dirty)
+  } catch (e) {}
+  try { if (node.setDirtyCanvas) node.setDirtyCanvas(true, true); } catch (e) {}
+}
+
+function seedPanelLayoutDefaults(tabs) {
+  state.values = {};
+  state.activated = {};
+  state.expanded = {};
+  function collectActivated(elements) {
+    for (const el of elements) {
+      if (el.activated) {
+        const name = el.name || el.i || el.label;
+        if (name) state.activated[name] = true;
+      }
+      if (el.children) collectActivated(el.children);
+    }
+  }
+  function collectOpen(elements) {
+    for (const el of (elements || [])) {
+      const t = ((el.type || '') + '').toLowerCase();
+      const n = el.name || el.i || el.label;
+      if (n && (t === 'group' || t === 'accordion' || t === 'dual') && el.open != null) {
+        state.expanded[n] = !!el.open;
+      }
+      if (el.children) collectOpen(el.children);
+    }
+  }
+  for (const tab of (tabs || [])) {
+    if (tab.children) { collectActivated(tab.children); collectOpen(tab.children); }
+  }
+}
+
+// Applies the bound widget's saved state over freshly seeded defaults.
+// Returns true when a saved (non-virgin) state was applied.
+function applyBoundWidgetState() {
+  if (bpbBoundNodeId == null || !app.graph) return false;
+  let node = null;
+  try { node = bpbFindNodeById(app.graph, bpbBoundNodeId); } catch (e) { return false; }
+  const widget = bpbGetWidget(node);
+  if (!widget) return false;
+  let d = null;
+  try {
+    const raw = widget.value;
+    d = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+  } catch (e) { return false; }
+  if (!d || typeof d !== 'object' || (!('values' in d) && !('activated' in d) && !('expanded' in d))) return false;
+  if (d.values && typeof d.values === 'object') state.values = { ...d.values };
+  if (d.activated && typeof d.activated === 'object') state.activated = { ...d.activated };
+  if (d.expanded && typeof d.expanded === 'object') state.expanded = { ...d.expanded };
+  return true;
+}
+
+function refreshPanelBinding() {
+  const tabsEl = document.getElementById('bpb-tabs');
+  const contentEl = document.getElementById('bpb-content');
+  const noteEl = document.getElementById('bpb-nobind');
+  const labelEl = document.getElementById('bpb-bound-label');
+  let title = 'Not bound';
+  if (bpbBoundNodeId == null) {
+    if (tabsEl) { tabsEl.style.display = 'none'; tabsEl.innerHTML = ''; }
+    if (contentEl) { contentEl.style.display = 'none'; contentEl.innerHTML = ''; }
+    if (noteEl) noteEl.style.display = '';
+    const p = document.getElementById('bpb-pos');
+    const n = document.getElementById('bpb-neg');
+    if (p) p.value = '';
+    if (n) n.value = '';
+  } else {
+    if (tabsEl) tabsEl.style.display = '';
+    if (contentEl) contentEl.style.display = '';
+    if (noteEl) noteEl.style.display = 'none';
+    try {
+      const node = app.graph ? bpbFindNodeById(app.graph, bpbBoundNodeId) : null;
+      if (node) title = node.title || ('Node #' + node.id);
+    } catch (e) {}
+  }
+  if (labelEl) labelEl.textContent = title;
+}
+
+function bindPanelToNode(nodeId, preloaded) {
+  const mySeq = ++bpbBindSeq;
+  bpbBoundNodeId = nodeId;
+  try {
+    if (app.graph) {
+      if (nodeId == null) bpbGraphBinding.delete(app.graph);
+      else bpbGraphBinding.set(app.graph, nodeId);
+    }
+  } catch (e) {}
+  refreshPanelBinding();
+  const tabs = (window.__prompt_builder_layout && window.__prompt_builder_layout.tabs) || (preloaded && preloaded.tabs) || [];
+  seedPanelLayoutDefaults(tabs);
+  bpbWidgetApplied = applyBoundWidgetState();
+  const finish = (layout) => {
+    // Drop stale renders: only the latest bind may paint.
+    if (mySeq !== bpbBindSeq) return;
+    if (layout && layout.tabs) {
+      window.__prompt_builder_lists = layout.lists || {};
+      window.__prompt_builder_layout = layout;
+      renderTabs(layout.tabs);
+    }
+    evalState();
+  };
+  if (preloaded && preloaded.tabs) finish(preloaded);
+  else loadLayout().then(l => finish(l));
+}
+
+function renderTabs(tabs, parentId = null) {
   const tabId = parentId || 'root';
   // For sub-tabs, the tab bar goes in bpb-tabs-<id>, content in bpb-content-<id>
   // For root tabs, tab bar goes in bpb-tabs, content in bpb-content
@@ -808,10 +1066,10 @@ function renderElement(c, tabs, parentTabId, siblingTabs, currentSelectName) {
     if (sortChildren) {
       children = [...children].sort((a, b) => compareLabels(a.display || a.name || '', b.display || b.name || ''));
     }
-    const activeCount = countSelectActive(c, name, parentTabId);
-    const countBadge = activeCount > 0 ? ' <span class="bpb-select-count">(' + activeCount + ')</span>' : '';
+    const stats = selectActiveStats(c, name, parentTabId);
+    const countBadge = stats.count > 0 ? ' <span class="bpb-select-count">(' + stats.count + ')</span>' : '';
     // Icon clear button, only when something inside is actively selected.
-    const selectClearBtn = subtreeHasActive(c.children, name, parentTabId)
+    const selectClearBtn = stats.has
       ? '<button class="bpb-clear-btn" data-action="clear-select" data-name="' + escapeHtml(name) + '" title="Clear selections in this list">×</button>'
       : '';
     const panelHtml = exp
@@ -915,37 +1173,8 @@ function initPanel(panel) {
     if (layout && layout.tabs) {
       window.__prompt_builder_lists = layout.lists || {};
       window.__prompt_builder_layout = layout;
-      
-      function collectActivated(elements) {
-        for (const el of elements) {
-          if (el.activated) {
-            const name = el.name || el.i || el.label;
-            if (name) state.activated[name] = true;
-          }
-          if (el.children) collectActivated(el.children);
-        }
-      }
-      for (const tab of layout.tabs) {
-        if (tab.children) collectActivated(tab.children);
-      }
+      seedPanelLayoutDefaults(layout.tabs);
 
-      // Seed initial expand/collapse from the open param (absent = type
-      // default: group/accordion expanded, dual collapsed; selects are
-      // dropdowns and always start closed).
-      function collectOpen(elements) {
-        for (const el of (elements || [])) {
-          const t = ((el.type || '') + '').toLowerCase();
-          const n = el.name || el.i || el.label;
-          if (n && (t === 'group' || t === 'accordion' || t === 'dual') && el.open != null) {
-            state.expanded[n] = !!el.open;
-          }
-          if (el.children) collectOpen(el.children);
-        }
-      }
-      for (const tab of layout.tabs) {
-        if (tab.children) collectOpen(tab.children);
-      }
-      
       // Capture initial state for reset functionality
       initialLayoutState = {
         values: { ...state.values },
@@ -953,15 +1182,76 @@ function initPanel(panel) {
         expanded: { ...state.expanded },
         active_tabs: { ...state.active_tabs }
       };
-      
-      renderTabs(layout.tabs);
+
+      bpbPanelReady = true;
+      bindPanelToNode(chooseBindingForGraph(app.graph), layout);
+    } else {
+      bpbPanelReady = true;
+      evalState();
     }
-    evalState();
   }).catch(e => console.error('[B Prompt Builder] initPanel error:', e));
 }
 
 app.registerExtension({
   name: 'B.PromptBuilder',
+  // Hidden per-node state store: serialized into the workflow JSON like any
+  // other widget value, and fed to the backend as the `state` input.
+  getCustomWidgets(app) {
+    return {
+      BPB_STATE(node, inputName, inputData) {
+        const el = document.createElement('div');
+        el.style.display = 'none';
+        let initial = '{}';
+        try {
+          const opts = Array.isArray(inputData) ? inputData[1] : (inputData && (inputData.options || inputData));
+          if (opts && typeof opts.default === 'string') initial = opts.default;
+        } catch (e) {}
+        let stored = initial;
+        const widget = node.addDOMWidget(inputName, 'hidden', el, {
+          getValue: () => stored,
+          setValue: (v) => { stored = (typeof v === 'string') ? v : JSON.stringify(v ?? {}); },
+        });
+        try { widget.hidden = true; } catch (e) {}
+        try { widget.serialize = true; } catch (e) {}
+        widget.callback = () => { markBpbDirty(); };
+        return widget;
+      }
+    };
+  },
+  async nodeCreated(node) {
+    // Freshly added node while unbound (e.g. first node in the workflow):
+    // bind the panel to it.
+    try {
+      if (!node || node.type !== 'PromptBuilderNode') return;
+      if (app.configuringGraph) return;
+      if (bpbPanelReady && bpbBoundNodeId == null) bindPanelToNode(node.id);
+    } catch (e) {}
+  },
+  async afterConfigureGraph() {
+    // Fires on workflow load and workflow-tab switches: rebind only when the
+    // resolved node differs, so repeated events can't repaint a settled
+    // panel. A deferred settle pass covers mid-load orderings (transient
+    // empty graph, widget values not yet applied) and repaint misses.
+    try {
+      if (!bpbPanelReady || !app.graph) return;
+      rebindIfChanged();
+      setTimeout(() => {
+        try {
+          if (!bpbPanelReady || !app.graph) return;
+          rebindIfChanged();
+          // Widget values may not have been applied at bind time; if the
+          // bind showed defaults, retry once now (panel edits stream into
+          // the widget, so re-applying can only restore saved content).
+          if (!bpbWidgetApplied && applyBoundWidgetState()) {
+            const layout = window.__prompt_builder_layout;
+            if (layout && layout.tabs) renderTabs(layout.tabs);
+            evalState();
+          }
+          ensurePanelPainted('settle');
+        } catch (e) {}
+      }, 400);
+    } catch (e) {}
+  },
   async setup() {
     ensureCss();
     if (!app.extensionManager || !app.extensionManager.registerSidebarTab) {
@@ -988,8 +1278,30 @@ app.registerExtension({
         if (!initialized) {
           initPanel(panel);
           initialized = true;
+        } else {
+          // Sync now for the live-DOM case, and once more after ComfyUI
+          // finishes any container rebuild/restore around this render call
+          // (icon-open path). Both passes are idempotent.
+          syncPanelToDom();
+          setTimeout(() => { try { syncPanelToDom(); } catch (e) {} }, 60);
         }
       }
     });
+
+    // Backstop poll (1s): rebind only when the bound node vanished or when
+    // unbound and a node appeared. No selection following.
+    setInterval(() => {
+      try {
+        if (document.hidden) return; // idle in background tabs
+        if (!bpbPanelReady || !app.graph) return;
+        if (bpbBoundNodeId != null) {
+          const node = bpbFindNodeById(app.graph, bpbBoundNodeId);
+          if (!node || node.type !== 'PromptBuilderNode') rebindIfChanged();
+          else ensurePanelPainted();
+        } else {
+          rebindIfChanged();
+        }
+      } catch (e) {}
+    }, 1000);
   }
 });

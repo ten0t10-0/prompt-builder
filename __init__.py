@@ -35,17 +35,28 @@ class PromptBuilderNode:
 
     @classmethod
     def INPUT_TYPES(cls):
+        # Per-node, per-workflow state arrives via a hidden widget created by
+        # the frontend (custom type BPB_STATE). It serializes into the
+        # workflow JSON like any other widget value.
         return {
-            'required': {},
-            'hidden': {
-                'state': ('STRING', {'default': '{}'}),
+            'required': {
+                'state': ('BPB_STATE', {'default': '{}'}),
             },
         }
 
     @classmethod
     def IS_CHANGED(cls, state: str = '{}'):
-        # Always re-run when shared UI state changes
+        # Re-run when prompt-relevant state changes (UI-only keys like
+        # expanded/collapsed are excluded so they never trigger execution).
         import hashlib
+        import json as _json
+        try:
+            d = _json.loads(state) if isinstance(state, str) else {}
+            if isinstance(d, dict):
+                sub = {k: d.get(k, {}) for k in ('values', 'activated')}
+                return hashlib.md5(_json.dumps(sub, sort_keys=True).encode()).hexdigest()[:8]
+        except Exception:
+            pass
         state_hash = hashlib.md5(str(_shared_ui_state).encode()).hexdigest()[:8]
         return state_hash
 
@@ -55,6 +66,18 @@ class PromptBuilderNode:
 
     def _get_shared_state(self):
         return state_mod.UiState.from_dict(_shared_ui_state)
+
+    def _resolve_state(self, state):
+        # Prefer the per-node widget state (per-workflow persistence); fall
+        # back to the shared live panel mirror (older workflows, API use).
+        if isinstance(state, str):
+            try:
+                d = json.loads(state)
+                if isinstance(d, dict) and any(k in d for k in ('values', 'activated', 'expanded')):
+                    return state_mod.UiState.from_dict(d)
+            except Exception:
+                pass
+        return self._get_shared_state()
 
     def _collect_active_prompts(self, st):
         try:
@@ -136,7 +159,7 @@ class PromptBuilderNode:
     def execute(self, state: str = '{}') -> tuple[str, str]:
         # Always use shared UI state for workflow runs
         # The hidden 'state' input is just for the /eval endpoint
-        st = self._get_shared_state()
+        st = self._resolve_state(state)
         active = self._collect_active_prompts(st)
         ev = evaluator.PromptEvaluator(st, active)
         pair = ev.build_prompts()
