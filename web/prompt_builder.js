@@ -40,12 +40,14 @@ function escapeHtml(s) {
 }
 
 let evalTimer = null;
+let evalSeq = 0;
 function scheduleEval() {
   if (evalTimer) clearTimeout(evalTimer);
   evalTimer = setTimeout(evalState, 150);
 }
 
 async function evalState(retry) {
+  const mySeq = ++evalSeq;
   try { writeWidgetFromPanel(); } catch (e) {}
   try {
     // Push state to backend for node to pick up (also runs unbound so the
@@ -73,6 +75,9 @@ async function evalState(retry) {
     });
     if (!resp.ok) throw new Error('eval failed: ' + resp.status);
     const j = await resp.json();
+    // Drop superseded responses: a newer eval started while this one was in
+    // flight, so painting here would regress the previews.
+    if (mySeq !== evalSeq) return;
     const p = document.getElementById('bpb-pos');
     const n = document.getElementById('bpb-neg');
     if (p) p.value = j.positive || '';
@@ -356,12 +361,15 @@ function applyPreset(presetEl, tabs) {
     return (k && setMap[k]) || null;
   }
   // Walk tab pages (all of them, not just active); tabId threading mirrors
-  // the renderer so standalone from_list fallbacks resolve identically.
+  // the renderer (including per-tab subtab ids) so standalone from_list
+  // fallbacks resolve identically.
   function walkTabs(tabsArr, tabId) {
-    for (const tab of (tabsArr || [])) {
+    const arr = tabsArr || [];
+    for (let ti = 0; ti < arr.length; ti++) {
+      const tab = arr[ti];
       walkContents(tab.children, undefined, tabId);
       const tabKids = (tab.children || []).filter(c => (((c.type || '') + '').toLowerCase()) === 'tab');
-      if (tabKids.length) walkTabs(tabKids, tabId + '::subtabs');
+      if (tabKids.length) walkTabs(tabKids, tabId + '::' + (tab.name || ('tab' + ti)) + '::subtabs');
     }
   }
   function walkContents(elements, currentSelectName, tabId) {
@@ -780,9 +788,11 @@ function renderNestedContent(tabs, tabId) {
     html += renderElement(c, tabs, tabId, tab.children);
   }
   
-  // If there are tab children, render a tab bar for them
+  // If there are tab children, render a tab bar for them. The sub-tab id
+  // includes this tab's name so sibling tabs don't share selection state.
+  // ('::subtabs' stays last so from_list fallbacks resolve identically.)
   if (tabChildren.length > 0) {
-    const subTabId = tabId + '::subtabs';
+    const subTabId = tabId + '::' + (tab.name || ('tab' + activeIdx)) + '::subtabs';
     const safeId = subTabId.replace(/::/g, '-');
     html += '<div id="bpb-tabs-' + escapeHtml(safeId) + '" class="bpb-subtabs"></div>';
     html += '<div id="bpb-content-' + escapeHtml(safeId) + '" class="bpb-subcontent"></div>';
@@ -828,9 +838,11 @@ function renderNestedContent(tabs, tabId) {
           for (const n of bpbSelectNames) if (n !== name) state.expanded[n] = false;
         }
         state.expanded[name] = willOpen;
+        scheduleEval(); // persist open state to the widget (drives save)
         renderNestedContent(tabs, tabId);
       } else if (act === 'close-select') {
         state.expanded[name] = false;
+        scheduleEval(); // persist open state to the widget (drives save)
         renderNestedContent(tabs, tabId);
       } else if (act === 'tab-reset') {
         const idx = state.active_tabs[tabId] || 0;
