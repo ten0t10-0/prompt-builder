@@ -21,6 +21,9 @@ let state = {
   active_tabs: {}  // {tabId: activeIndex}
 };
 
+// Registry of rendered select names; opening one dropdown closes the rest.
+const bpbSelectNames = new Set();
+
 async function loadLayout() {
   try {
     const resp = await fetch('/extensions/prompt-builder/layout.json', { cache: 'no-cache' });
@@ -209,6 +212,29 @@ function subtreeHasActive(elements, currentSelectName, tabId) {
     }
   }
   return false;
+}
+
+// Count of activated options in a select subtree (for the closed summary).
+function countSelectActive(selectEl, selName, tabId) {
+  let n = 0;
+  function walk(elements, currentSelectName) {
+    for (const el of (elements || [])) {
+      const type = ((el.type || '') + '').toLowerCase();
+      if (type === 'single' || type === 'dual' || type === 'edit' || type === 'edit_link') {
+        if (state.activated[el.name || el.i || el.label]) n++;
+      } else if (type === 'select') {
+        walk(el.children, el.name || el.i || currentSelectName);
+      } else if (type === 'from_list') {
+        for (const opt of expandFromListOptions(el, currentSelectName, tabId)) {
+          if (state.activated[opt.name]) n++;
+        }
+      } else if (el.children) {
+        walk(el.children, currentSelectName);
+      }
+    }
+  }
+  walk(selectEl.children, selName);
+  return n;
 }
 
 function getTabId(tab, parentId) {
@@ -437,6 +463,40 @@ function renderTabs(tabs, parentId = null, isSubTabs = false) {
   renderNestedContent(tabs, tabId);
 }
 
+function panelSelectName(panel) {
+  const block = panel.closest('.bpb-block');
+  const head = block ? block.querySelector('[data-select-toggle]') : null;
+  return head ? head.getAttribute('data-name') : null;
+}
+
+// Size open dropdown panels to the visible scroll area below their header,
+// flipping upward when there is no room. Measuring against the content
+// wrapper (not the viewport) keeps the panel above the sticky preview
+// footer and avoids forcing a second scrollbar on the wrapper.
+function fitSelectPanels(cont) {
+  cont.querySelectorAll('.bpb-select-panel').forEach(panel => {
+    const block = panel.closest('.bpb-block');
+    const head = block ? block.querySelector('[data-select-toggle]') : null;
+    const rect = (head || panel).getBoundingClientRect();
+    const wrap = panel.closest('.bpb-content-wrap');
+    const wrapRect = wrap ? wrap.getBoundingClientRect() : null;
+    const viewBottom = wrapRect ? wrapRect.bottom : window.innerHeight;
+    const viewTop = wrapRect ? wrapRect.top : 0;
+    const margin = 8, minH = 96;
+    const below = Math.floor(viewBottom - rect.bottom - 2 - margin);
+    const above = Math.floor(rect.top - viewTop - margin);
+    if (below < minH && above > below) {
+      panel.style.top = 'auto';
+      panel.style.bottom = 'calc(100% + 2px)';
+      panel.style.maxHeight = Math.max(minH, above) + 'px';
+    } else {
+      panel.style.top = '';
+      panel.style.bottom = '';
+      panel.style.maxHeight = Math.max(minH, below) + 'px';
+    }
+  });
+}
+
 function renderNestedContent(tabs, tabId) {
   const activeIdx = state.active_tabs[tabId] || 0;
   const tab = tabs[activeIdx];
@@ -484,6 +544,13 @@ function renderNestedContent(tabs, tabId) {
     '</div>';
   }
   
+  // Preserve open dropdown scroll across the re-render below.
+  const panelScroll = new Map();
+  cont.querySelectorAll('.bpb-select-panel').forEach(panel => {
+    const selName = panelSelectName(panel);
+    if (selName) panelScroll.set(selName, panel.scrollTop);
+  });
+
   cont.innerHTML = html;
   
   // Attach handlers for this container
@@ -497,7 +564,15 @@ function renderNestedContent(tabs, tabId) {
         scheduleEval();
         renderNestedContent(tabs, tabId);
       } else if (act === 'toggle-expand') {
-        state.expanded[name] = !state.expanded[name];
+        const willOpen = !state.expanded[name];
+        if (willOpen && el.hasAttribute('data-select-toggle')) {
+          // Dropdown behavior: opening one select closes the others.
+          for (const n of bpbSelectNames) if (n !== name) state.expanded[n] = false;
+        }
+        state.expanded[name] = willOpen;
+        renderNestedContent(tabs, tabId);
+      } else if (act === 'close-select') {
+        state.expanded[name] = false;
         renderNestedContent(tabs, tabId);
       } else if (act === 'tab-reset') {
         const idx = state.active_tabs[tabId] || 0;
@@ -597,6 +672,12 @@ function renderNestedContent(tabs, tabId) {
         scheduleEval();
       }
     };
+  });
+  // Fit open dropdowns to the available space, then restore their scroll.
+  fitSelectPanels(cont);
+  cont.querySelectorAll('.bpb-select-panel').forEach(panel => {
+    const selName = panelSelectName(panel);
+    if (selName && panelScroll.has(selName)) panel.scrollTop = panelScroll.get(selName);
   });
 }
 
@@ -707,9 +788,11 @@ function renderElement(c, tabs, parentTabId, siblingTabs, currentSelectName) {
   if (type === 'select') {
     const name = c.name || c.i;
     if (!name) return '<div>' + escapeHtml(c.label||'') + '</div>';
-    // Collapsed by default
+    bpbSelectNames.add(name);
+    // Dropdown: collapsed header with selection count; options in a floating
+    // panel with a click-catching backdrop. Collapsed by default.
     const exp = state.expanded[name] === true;
-    // Sort children by name unless sort: false.
+    // Sort children by display label unless sort: false.
     // List-based options are expanded in place (always alphabetically
     // sorted) so with sort enabled they interleave with normal singles,
     // and with sort: false they stay slotted where the from_list appeared.
@@ -725,12 +808,17 @@ function renderElement(c, tabs, parentTabId, siblingTabs, currentSelectName) {
     if (sortChildren) {
       children = [...children].sort((a, b) => compareLabels(a.display || a.name || '', b.display || b.name || ''));
     }
-    const childHtml = exp ? '<div class="bpb-block-body">' + (children.map(x => x._fromList ? renderSingleRow(x.name, x.display, { prompt: x.prompt }) : renderElement(x,tabs,parentTabId, c.children, name)).join('')) + '</div>' : '';
+    const activeCount = countSelectActive(c, name, parentTabId);
+    const countBadge = activeCount > 0 ? ' <span class="bpb-select-count">(' + activeCount + ')</span>' : '';
     // Icon clear button, only when something inside is actively selected.
     const selectClearBtn = subtreeHasActive(c.children, name, parentTabId)
       ? '<button class="bpb-clear-btn" data-action="clear-select" data-name="' + escapeHtml(name) + '" title="Clear selections in this list">×</button>'
       : '';
-    return '<div class="bpb-block"><div class="bpb-block-head" data-action="toggle-expand" data-name="' + escapeHtml(name) + '"><b>' + escapeHtml(c.label||name) + '</b><span class="bpb-head-right"><span class="bpb-caret">' + (exp ? '▼' : '▶') + '</span>' + selectClearBtn + '</span></div>' + childHtml + '</div>';
+    const panelHtml = exp
+      ? '<div class="bpb-select-backdrop" data-action="close-select" data-name="' + escapeHtml(name) + '"></div>' +
+        '<div class="bpb-select-panel">' + (children.map(x => x._fromList ? renderSingleRow(x.name, x.display, { prompt: x.prompt }) : renderElement(x,tabs,parentTabId, c.children, name)).join('')) + '</div>'
+      : '';
+    return '<div class="bpb-block"><div class="bpb-block-head" data-action="toggle-expand" data-select-toggle data-name="' + escapeHtml(name) + '"><b>' + escapeHtml(c.label||name) + '</b>' + countBadge + '<span class="bpb-head-right"><span class="bpb-caret">' + (exp ? '▼' : '▶') + '</span>' + selectClearBtn + '</span></div>' + panelHtml + '</div>';
   }
 if (type === 'single') {
     const name = c.name || c.i || c.label;
@@ -842,12 +930,13 @@ function initPanel(panel) {
       }
 
       // Seed initial expand/collapse from the open param (absent = type
-      // default: group/accordion expanded, select/dual collapsed).
+      // default: group/accordion expanded, dual collapsed; selects are
+      // dropdowns and always start closed).
       function collectOpen(elements) {
         for (const el of (elements || [])) {
           const t = ((el.type || '') + '').toLowerCase();
           const n = el.name || el.i || el.label;
-          if (n && (t === 'group' || t === 'accordion' || t === 'select' || t === 'dual') && el.open != null) {
+          if (n && (t === 'group' || t === 'accordion' || t === 'dual') && el.open != null) {
             state.expanded[n] = !!el.open;
           }
           if (el.children) collectOpen(el.children);

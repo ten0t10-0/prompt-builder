@@ -91,7 +91,6 @@ tabs:
       # Default sorted select: list options interleave with singles.
       - type: select
         name: Wardrobe
-        open: true
         children:
           - type: from_list
             name: colors

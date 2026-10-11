@@ -182,7 +182,9 @@
     border: 1px solid var(--border-color, #555);
     border-radius: 3px;
     margin-bottom: 4px;
-    overflow: hidden;
+    /* Visible overflow + positioning anchor for the select dropdown panel. */
+    overflow: visible;
+    position: relative;
 }
 
 .bpb-block-head {
@@ -195,6 +197,7 @@
     cursor: pointer;
     font-size: 13px;
     min-height: 22px;
+    border-radius: 3px;
 }
 
 .bpb-block-head b {
@@ -245,6 +248,38 @@
    otherwise the glyph top-aligns instead of sitting on the row axis. */
 .bpb-head-right > .bpb-caret {
     align-self: center;
+}
+
+/* ---------- select dropdown ---------- */
+.bpb-select-count {
+    font-size: 11px;
+    color: gray;
+    font-weight: normal;
+    flex-shrink: 0;
+}
+
+/* Transparent click-catcher behind the open panel; closes the dropdown. */
+.bpb-select-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: transparent;
+}
+
+.bpb-select-panel {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: -1px;
+    right: -1px;
+    z-index: 50;
+    background: var(--comfy-menu-bg, #282828);
+    border: 1px solid var(--border-color, #555);
+    border-radius: 3px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+    /* Fallback cap; JS sizes to the space below the header on each render. */
+    max-height: 240px;
+    overflow: auto;
+    padding: 2px 4px;
 }
 
 /* ---------- single ---------- */
