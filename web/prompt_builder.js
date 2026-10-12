@@ -46,6 +46,33 @@ function scheduleEval() {
   evalTimer = setTimeout(evalState, 150);
 }
 
+// Auto-size preview textareas via the rows attribute (browser owns line
+// math, so no fractional-pixel scrollbars), capped at half the panel height
+// through max-height. Minimum 2 rows.
+function autosizePreviews() {
+  try {
+    const panel = document.getElementById(id);
+    const max = panel && panel.clientHeight ? Math.floor(panel.clientHeight / 2) : 320;
+    for (const tid of ['bpb-pos', 'bpb-neg']) {
+      const ta = document.getElementById(tid);
+      if (!ta) continue;
+      ta.style.maxHeight = max + 'px';
+      let lineH = 0;
+      try { lineH = parseFloat(window.getComputedStyle(ta).lineHeight); } catch (e) {}
+      if (!isFinite(lineH) || lineH <= 0) lineH = 17;
+      // Measure at 1 row, subtracting the box chrome (padding + rounding
+      // slack): scrollHeight alone is floored at the visible box height and
+      // would over-count short content. Content height is always a whole
+      // multiple of lineH, so round() is safe against sub-pixel error.
+      ta.rows = 1;
+      const chrome = Math.max(0, ta.clientHeight - lineH);
+      const lines = Math.round((ta.scrollHeight - chrome) / lineH);
+      const maxRows = Math.max(2, Math.floor(max / lineH));
+      ta.rows = Math.min(Math.max(lines, 2), maxRows);
+    }
+  } catch (e) {}
+}
+
 async function evalState(retry) {
   const mySeq = ++evalSeq;
   try { writeWidgetFromPanel(); } catch (e) {}
@@ -65,6 +92,7 @@ async function evalState(retry) {
     const n0 = document.getElementById('bpb-neg');
     if (p0) p0.value = '';
     if (n0) n0.value = '';
+    autosizePreviews();
     return;
   }
   try {
@@ -82,6 +110,11 @@ async function evalState(retry) {
     const n = document.getElementById('bpb-neg');
     if (p) p.value = j.positive || '';
     if (n) n.value = j.negative || '';
+    autosizePreviews();
+    // Footer growth shrinks the scroll wrapper open dropdowns are fitted
+    // against, so re-fit afterwards to stay in sync.
+    try { fitSelectPanels(document); } catch (e) {}
+    autosizePreviews();
   } catch (e) {
     // A failed eval leaves stale/empty previews with no recovery trigger,
     // so retry once (e.g. server busy during workflow load).
@@ -117,9 +150,9 @@ function createPanel() {
   footer.className = 'bpb-footer';
   footer.innerHTML =
     '<div class="bpb-preview-label">Positive:</div>' +
-    '<textarea id="bpb-pos" class="bpb-preview" readonly rows="3" spellcheck="false"></textarea>' +
+    '<textarea id="bpb-pos" class="bpb-preview" readonly rows="2" spellcheck="false"></textarea>' +
     '<div class="bpb-preview-label">Negative:</div>' +
-    '<textarea id="bpb-neg" class="bpb-preview" readonly rows="3" spellcheck="false"></textarea>';
+    '<textarea id="bpb-neg" class="bpb-preview" readonly rows="2" spellcheck="false"></textarea>';
   
   panel.appendChild(header);
   panel.appendChild(contentWrapper);
@@ -854,8 +887,10 @@ function renderNestedContent(tabs, tabId) {
           if (willOpen) {
             for (const n of bpbSelectNames) if (n !== name) state.expanded[n] = false;
           }
-        } else {
-          // Toggling anything else shifts focus away: shut open dropdowns.
+        } else if (!el.closest || !el.closest('.bpb-select-panel')) {
+          // Toggling anything outside an open panel shifts focus away: shut
+          // open dropdowns. Toggles inside a panel (e.g. a dual's editor)
+          // must not collapse the panel they live in.
           for (const n of bpbSelectNames) state.expanded[n] = false;
         }
         state.expanded[name] = willOpen;
@@ -957,6 +992,9 @@ function renderNestedContent(tabs, tabId) {
       } else if (t === 'checkbox') {
         state.values[name] = el.checked;
         scheduleEval();
+        // Negativity flags drive row tint classes: repaint so they sync.
+        // (Text/range inputs skip this — re-rendering would steal focus.)
+        if (name.slice(-12) === '_is_negative') renderNestedContent(tabs, tabId);
       }
     };
   });
@@ -1016,7 +1054,8 @@ function renderSingleRow(name, displayLabel, opts) {
   const isNegative = state.values[name + '_is_negative'] ?? opts.is_negative ?? false;
   const promptValue = escapeHtml(state.values[name + '_prompt'] ?? opts.prompt ?? '');
   const checkboxId = 'single-act-' + escapeHtml(name);
-  return '<div class="bpb-single' + (act ? ' bpb-on' : '') + '">' +
+  const negCls = (act && isNegative) ? ' bpb-neg' : '';
+  return '<div class="bpb-single' + (act ? ' bpb-on' : '') + negCls + '">' +
     '<label class="bpb-single-label">' +
       '<input type="checkbox" id="' + checkboxId + '" ' + (act?'checked':'') + ' data-action="toggle-activate" data-name="' + escapeHtml(name) + '"/>' +
       '<span class="bpb-single-name">' + escapeHtml(displayLabel) + '</span>' +
@@ -1161,7 +1200,9 @@ if (type === 'single') {
     const isLinked = type === 'edit_link';
     // Use 'edit' from layout as default, not 'default'
     const val = state.values[name] != null ? state.values[name] : (c.edit != null ? c.edit : (c.default != null ? c.default : 0.5));
-    const isNegative = state.values[name + '_is_negative'] ?? c.is_negative ?? false;
+    const isNegative = isLinked
+      ? (state.values[c.link + '_is_negative'] ?? c.is_negative ?? false)
+      : (state.values[name + '_is_negative'] ?? c.is_negative ?? false);
     const prefix = c.prefix ? escapeHtml(c.prefix) + ' ' : '';
     const postfix = c.postfix ? ' ' + escapeHtml(c.postfix) : '';
     const rangeText = prefix + '[range: ' + escapeHtml(c.prompt_a||'') + ' → ' + escapeHtml(c.prompt_b||'') + ']' + postfix;
@@ -1169,7 +1210,7 @@ if (type === 'single') {
     const tooltipText = isLinked 
       ? escapeHtml(rangeText + '\n' + linkText)
       : escapeHtml(rangeText);
-    let html = '<div class="bpb-edit">';
+    let html = '<div class="bpb-edit' + (act ? ' bpb-on' : '') + ((act && isNegative) ? ' bpb-neg' : '') + '">';
     html += '<label class="bpb-edit-label">';
     html += '<input type="checkbox" ' + (act?'checked':'') + ' data-action="toggle-activate" data-name="' + escapeHtml(name) + '"/>';
     html += '<span>' + escapeHtml(name);
@@ -1288,7 +1329,7 @@ app.registerExtension({
             if (layout && layout.tabs) renderTabs(layout.tabs);
             evalState();
           }
-          ensurePanelPainted('settle');
+          ensurePanelPainted();
         } catch (e) {}
       }, 400);
     } catch (e) {}
@@ -1356,5 +1397,8 @@ app.registerExtension({
         }
       } catch (e) {}
     }, 1000);
+    // Keep the half-panel preview cap and dropdown fits accurate across
+    // viewport resizes.
+    window.addEventListener('resize', () => { try { autosizePreviews(); fitSelectPanels(document); } catch (e) {} });
   }
 });

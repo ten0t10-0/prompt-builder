@@ -290,18 +290,25 @@
 }
 
 /* ---------- single ---------- */
+/* Padding lives on the label (not the row) so the entire row box is the
+   click target with no dead gaps; outer dims/margins are unchanged so
+   adjacent .bpb-on highlights stay seamless. */
 .bpb-single {
     display: flex;
-    align-items: center;
+    align-items: stretch;
     gap: 4px;
-    padding: 1px 4px;
+    padding: 0 4px 0 0;
     min-height: 22px;
     border-radius: 3px;
     margin: 0;
 }
 
 .bpb-single.bpb-on {
-    background: var(--comfy-input-bg-focus, #3a3a3a);
+    background: rgba(46, 204, 113, 0.16);
+}
+
+.bpb-single.bpb-on.bpb-neg {
+    background: rgba(255, 107, 107, 0.16);
 }
 
 .bpb-single-label {
@@ -310,6 +317,8 @@
     gap: 4px;
     flex: 1;
     min-width: 0;
+    align-self: stretch;
+    padding: 1px 0 1px 4px;
     cursor: pointer;
     font-size: 13px;
 }
@@ -403,6 +412,14 @@
     border-radius: 3px;
 }
 
+.bpb-edit.bpb-on {
+    background: rgba(46, 204, 113, 0.16);
+}
+
+.bpb-edit.bpb-on.bpb-neg {
+    background: rgba(255, 107, 107, 0.16);
+}
+
 .bpb-edit-label {
     display: flex;
     align-items: center;
@@ -481,6 +498,7 @@
     line-height: 1.35;
     word-break: break-word;
     white-space: pre-wrap;
+    /* Fallback cap; autosizePreviews manages max-height (half the panel). */
     max-height: 84px;
     overflow: auto;
     background: var(--comfy-input-bg, #333);
