@@ -489,17 +489,3 @@
     border: 1px solid var(--border-color, #555);
     margin: 0;
 }
-
-/* legacy container hook */
-.b-prompt-builder-container {
-    padding: 4px 6px;
-    font-family: var(--font-family);
-    color: var(--fg-color);
-    font-size: 13px;
-}
-
-.b-header {
-    font-weight: bold;
-    font-size: 13px;
-    margin-bottom: 4px;
-}

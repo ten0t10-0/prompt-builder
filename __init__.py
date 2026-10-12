@@ -62,7 +62,11 @@ class PromptBuilderNode:
 
     def __init__(self):
         self._state = state_mod.UiState()
-        self._layout_path = os.path.join(os.path.dirname(__file__), 'layout.yaml')
+        # layout.json wins when both formats exist, else layout.yaml/.yml.
+        self._layout_path = (
+            parser.find_layout_file(os.path.dirname(__file__))
+            or os.path.join(os.path.dirname(__file__), 'layout.yaml')
+        )
 
     def _get_shared_state(self):
         return state_mod.UiState.from_dict(_shared_ui_state)
@@ -81,7 +85,7 @@ class PromptBuilderNode:
 
     def _collect_active_prompts(self, st):
         try:
-            ly = parser.parse_yaml(self._layout_path)
+            ly = parser.parse_layout_file(self._layout_path)
         except Exception:
             return []
         active = []
@@ -172,23 +176,23 @@ try:
         @PromptServer.instance.routes.get('/extensions/prompt-builder/layout.yaml')
         async def get_layout(request):
             import aiofiles
-            layout_path = os.path.join(os.path.dirname(__file__), 'layout.yaml')
+            layout_path = parser.find_layout_file(os.path.dirname(__file__))
+            if layout_path is None:
+                layout_path = os.path.join(os.path.dirname(__file__), 'layout.yaml')
             async with aiofiles.open(layout_path, 'rb') as f:
                 data = await f.read()
             from aiohttp import web
-            return web.Response(body=data, content_type='text/yaml')
-
-        @PromptServer.instance.routes.get('/extensions/prompt-builder/state/{node_id}')
-        async def get_state(request):
-            from aiohttp import web
-            return web.json_response({})
+            content_type = 'application/json' if layout_path.lower().endswith('.json') else 'text/yaml'
+            return web.Response(body=data, content_type=content_type)
 
         @PromptServer.instance.routes.get('/extensions/prompt-builder/layout.json')
         async def get_layout_json(request):
             from aiohttp import web
-            from .prompt_builder_core import parser, layout as layout_mod
+            from .prompt_builder_core import parser
             try:
-                ly = parser.parse_yaml(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'layout.yaml'))
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+                layout_path = parser.find_layout_file(base_dir) or os.path.join(base_dir, 'layout.yaml')
+                ly = parser.parse_layout_file(layout_path)
                 
                 def elem_to_dict(elem):
                     result = {'type': elem.type, 'name': elem.name}

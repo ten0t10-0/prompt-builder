@@ -1,12 +1,29 @@
 from __future__ import annotations
-from typing import Dict, Any, List
+import json
+import os
+from typing import Dict, Any, List, Optional
 from .schema import Layout, LayoutElement
 import yaml
 
 
-def parse_yaml(path: str) -> Layout:
+# Source discovery order when both formats exist.
+LAYOUT_FILENAMES = ('layout.json', 'layout.yaml', 'layout.yml')
+
+
+def find_layout_file(search_dir: str) -> Optional[str]:
+    for name in LAYOUT_FILENAMES:
+        path = os.path.join(search_dir, name)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def parse_layout_file(path: str) -> Layout:
     with open(path, 'r', encoding='utf-8') as f:
-        data = yaml.safe_load(f) or {}
+        if path.lower().endswith('.json'):
+            data = json.load(f) or {}
+        else:
+            data = yaml.safe_load(f) or {}
     return _from_dict(data)
 
 

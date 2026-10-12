@@ -34,6 +34,7 @@ Arguments:
 
 Usage:
   python convert_layout.py layout.txt layout.yaml
+  python convert_layout.py layout.txt layout.json   (output format follows the output extension)
 """
 
 import sys
@@ -41,7 +42,6 @@ import re
 import yaml
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
-from collections import OrderedDict
 
 
 @dataclass
@@ -271,7 +271,12 @@ def convert_layout(input_path: str, output_path: str):
     }
     
     with open(output_path, 'w', encoding='utf-8') as f:
-        yaml.dump(output, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        if output_path.lower().endswith('.json'):
+            import json as _json
+            _json.dump(output, f, indent=2, ensure_ascii=False)
+            f.write('\n')
+        else:
+            yaml.dump(output, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
     
     print(f"Converted {input_path} -> {output_path}")
     print(f"  Lists: {list(lists.keys())}")
