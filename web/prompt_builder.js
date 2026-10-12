@@ -735,6 +735,22 @@ function panelSelectName(panel) {
   return head ? head.getAttribute('data-name') : null;
 }
 
+// Shut every open dropdown surgically (state flip + node removal, no full
+// re-render needed: the next render derives from state). Clicks inside an
+// open panel or on action controls never reach the global closer.
+function closeAllSelectPanels() {
+  let changed = false;
+  document.querySelectorAll('.bpb-select-panel').forEach(panel => {
+    const selName = panelSelectName(panel);
+    if (selName && state.expanded[selName]) { state.expanded[selName] = false; changed = true; }
+    const block = panel.closest('.bpb-block');
+    const caret = block ? block.querySelector('[data-select-toggle] .bpb-caret') : null;
+    if (caret) caret.textContent = '▶';
+    panel.remove();
+  });
+  if (changed) scheduleEval(); // persist open state to the widget (drives save)
+}
+
 // Size open dropdown panels to the visible scroll area below their header,
 // flipping upward when there is no room. Measuring against the content
 // wrapper (not the viewport) keeps the panel above the sticky preview
@@ -833,15 +849,16 @@ function renderNestedContent(tabs, tabId) {
         renderNestedContent(tabs, tabId);
       } else if (act === 'toggle-expand') {
         const willOpen = !state.expanded[name];
-        if (willOpen && el.hasAttribute('data-select-toggle')) {
+        if (el.hasAttribute('data-select-toggle')) {
           // Dropdown behavior: opening one select closes the others.
-          for (const n of bpbSelectNames) if (n !== name) state.expanded[n] = false;
+          if (willOpen) {
+            for (const n of bpbSelectNames) if (n !== name) state.expanded[n] = false;
+          }
+        } else {
+          // Toggling anything else shifts focus away: shut open dropdowns.
+          for (const n of bpbSelectNames) state.expanded[n] = false;
         }
         state.expanded[name] = willOpen;
-        scheduleEval(); // persist open state to the widget (drives save)
-        renderNestedContent(tabs, tabId);
-      } else if (act === 'close-select') {
-        state.expanded[name] = false;
         scheduleEval(); // persist open state to the widget (drives save)
         renderNestedContent(tabs, tabId);
       } else if (act === 'tab-reset') {
@@ -1037,8 +1054,21 @@ function renderElement(c, tabs, parentTabId, siblingTabs, currentSelectName) {
     return html;
   }
   if (type === 'row') {
-    let html = '<div class="bpb-row">';
-    for (let ch of (c.children||[])) html += '<div>' + renderElement(ch,tabs,parentTabId, c.children, currentSelectName) + '</div>';
+    // Grid with one track per scale unit: rows with equal scale totals share
+    // identical track boundaries, so columns line up across rows regardless
+    // of item count (flex+gap can't do this — differing gap totals shift
+    // proportional boundaries). Non-integer scales round to whole tracks.
+    const kids = c.children || [];
+    const spans = kids.map(ch => {
+      let s = Math.round(parseFloat(ch.scale));
+      if (!isFinite(s) || s < 1) s = 1;
+      return s;
+    });
+    const total = spans.reduce((a, b) => a + b, 0) || 1;
+    let html = '<div class="bpb-row" style="grid-template-columns:repeat(' + total + ',1fr)">';
+    for (let i = 0; i < kids.length; i++) {
+      html += '<div style="grid-column:span ' + spans[i] + ';min-width:0">' + renderElement(kids[i],tabs,parentTabId, c.children, currentSelectName) + '</div>';
+    }
     html += '</div>';
     return html;
   }
@@ -1060,7 +1090,7 @@ function renderElement(c, tabs, parentTabId, siblingTabs, currentSelectName) {
     if (!name) return '<div>' + escapeHtml(c.label||'') + '</div>';
     bpbSelectNames.add(name);
     // Dropdown: collapsed header with selection count; options in a floating
-    // panel with a click-catching backdrop. Collapsed by default.
+    // panel closed by the global outside-click closer. Collapsed by default.
     const exp = state.expanded[name] === true;
     // Sort children by display label unless sort: false.
     // List-based options are expanded in place (always alphabetically
@@ -1085,8 +1115,7 @@ function renderElement(c, tabs, parentTabId, siblingTabs, currentSelectName) {
       ? '<button class="bpb-clear-btn" data-action="clear-select" data-name="' + escapeHtml(name) + '" title="Clear selections in this list">×</button>'
       : '';
     const panelHtml = exp
-      ? '<div class="bpb-select-backdrop" data-action="close-select" data-name="' + escapeHtml(name) + '"></div>' +
-        '<div class="bpb-select-panel">' + (children.map(x => x._fromList ? renderSingleRow(x.name, x.display, { prompt: x.prompt }) : renderElement(x,tabs,parentTabId, c.children, name)).join('')) + '</div>'
+      ? '<div class="bpb-select-panel">' + (children.map(x => x._fromList ? renderSingleRow(x.name, x.display, { prompt: x.prompt }) : renderElement(x,tabs,parentTabId, c.children, name)).join('')) + '</div>'
       : '';
     return '<div class="bpb-block"><div class="bpb-block-head" data-action="toggle-expand" data-select-toggle data-name="' + escapeHtml(name) + '"><b>' + escapeHtml(c.label||name) + '</b>' + countBadge + '<span class="bpb-head-right"><span class="bpb-caret">' + (exp ? '▼' : '▶') + '</span>' + selectClearBtn + '</span></div>' + panelHtml + '</div>';
   }
@@ -1300,6 +1329,18 @@ app.registerExtension({
       }
     });
 
+    // Global dropdown closer: any real click outside an open panel shuts
+    // it. Action controls stopPropagation in the container handler, so they
+    // (and everything inside a panel) never reach here — no synthetic
+    // events, no overlay, nothing to hit-test through.
+    document.addEventListener('click', (ev) => {
+      try {
+        if (ev.button !== undefined && ev.button !== 0) return;
+        if (!document.querySelector('.bpb-select-panel')) return;
+        if (ev.target && ev.target.closest && ev.target.closest('.bpb-select-panel')) return;
+        closeAllSelectPanels();
+      } catch (e) {}
+    });
     // Backstop poll (1s): rebind only when the bound node vanished or when
     // unbound and a node appeared. No selection following.
     setInterval(() => {

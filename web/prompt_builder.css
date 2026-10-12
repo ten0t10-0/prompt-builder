@@ -172,14 +172,11 @@
 
 /* ---------- layout containers ---------- */
 .bpb-row {
-    display: flex;
+    display: grid;
     gap: 4px;
-    flex-wrap: wrap;
 }
 
 .bpb-row > * {
-    flex: 1;
-    min-width: 100px;
     min-width: 0;
 }
 
@@ -274,14 +271,6 @@
     color: gray;
     font-weight: normal;
     flex-shrink: 0;
-}
-
-/* Transparent click-catcher behind the open panel; closes the dropdown. */
-.bpb-select-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 40;
-    background: transparent;
 }
 
 .bpb-select-panel {

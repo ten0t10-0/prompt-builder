@@ -171,6 +171,7 @@ tabs:
           - type: row
             children:
               - type: column
+                scale: 2
                 children:
                   - type: edit
                     name: Depth
@@ -178,6 +179,7 @@ tabs:
                     prompt_b: deep depth
                     edit: 0.5
               - type: column
+                scale: 1
                 children:
                   - type: edit
                     name: Motion
