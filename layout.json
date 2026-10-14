@@ -131,7 +131,7 @@
           "prompt_pos": "long hair",
           "prompt_neg": "short hair",
           "emphasis_neg": 0.8,
-          "postfix": "hairstyle"
+          "postfix": " hairstyle"
         },
         {
           "type": "separator"
@@ -143,7 +143,7 @@
             {
               "type": "from_list",
               "name": "colors",
-              "postfix": "clothes"
+              "postfix": " clothes"
             },
             {
               "type": "single",
@@ -302,7 +302,7 @@
         {
           "type": "select",
           "name": "Backdrop",
-          "prefix": "in",
+          "prefix": "in ",
           "children": [
             {
               "type": "from_list",
@@ -315,7 +315,7 @@
           "name": "Weather",
           "prompt_pos": "sunny",
           "prompt_neg": "rainy",
-          "prefix": "outdoor"
+          "prefix": "outdoor "
         },
         {
           "type": "single",

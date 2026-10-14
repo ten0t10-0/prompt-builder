@@ -25,10 +25,11 @@ class PromptElement:
             prefix = self.data.get('prefix', '') or ''
             postfix = self.data.get('postfix', '') or ''
             if prompt:
+                # Affixes concatenate verbatim: spacing lives in the values.
                 if prefix:
-                    prompt = prefix.strip() + ' ' + prompt.strip()
+                    prompt = prefix + prompt
                 if postfix:
-                    prompt = prompt.strip() + ' ' + postfix.strip()
+                    prompt = prompt + postfix
             # If emphasis is 0, omit the prompt
             if emphasis <= 0:
                 prompt = ''
@@ -46,14 +47,14 @@ class PromptElement:
             postfix = self.data.get('postfix', '') or ''
             if pp:
                 if prefix:
-                    pp = prefix.strip() + ' ' + pp.strip()
+                    pp = prefix + pp
                 if postfix:
-                    pp = pp.strip() + ' ' + postfix.strip()
+                    pp = pp + postfix
             if pn:
                 if prefix:
-                    pn = prefix.strip() + ' ' + pn.strip()
+                    pn = prefix + pn
                 if postfix:
-                    pn = pn.strip() + ' ' + postfix.strip()
+                    pn = pn + postfix
             # If emphasis is 0, omit the prompt
             if sp <= 0:
                 pp = ''
@@ -77,14 +78,14 @@ class PromptElement:
             postfix = self.data.get('postfix', '') or ''
             if pa:
                 if prefix:
-                    pa = prefix.strip() + ' ' + pa.strip()
+                    pa = prefix + pa
                 if postfix:
-                    pa = pa.strip() + ' ' + postfix.strip()
+                    pa = pa + postfix
             if pb:
                 if prefix:
-                    pb = prefix.strip() + ' ' + pb.strip()
+                    pb = prefix + pb
                 if postfix:
-                    pb = pb.strip() + ' ' + postfix.strip()
+                    pb = pb + postfix
             # Static blend: weighted prompts (ComfyUI native syntax)
             # At extremes (0 or 1), only show one prompt
             if e <= 0.001:
