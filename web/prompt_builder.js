@@ -349,6 +349,21 @@ function applySelectEntry(selectEl, selName, setEl, tabId, clearRest) {
     for (const opt of options) clearOptionState(opt);
     return;
   }
+  const unmatched = [];
+  for (const ch of ((setEl && setEl.children) || [])) {
+    if ((((ch.type || '') + '').toLowerCase()) !== 'value') continue;
+    const vn = ch.name || ch.i;
+    if (!vn) continue;
+    const hit = options.some(o => String(o.display).toLowerCase() === String(vn).toLowerCase());
+    if (!hit) unmatched.push(String(vn));
+  }
+  if (unmatched.length) {
+    // JSON-quote both sides so invisible differences (case aside:
+    // extra/edge whitespace) are visible in the console.
+    const available = options.map(o => String(o.display));
+    const shown = available.length > 25 ? available.slice(0, 25).concat(['+' + (available.length - 25) + ' more']) : available;
+    try { console.warn('[B Prompt Builder] preset values matched no option in select "' + selName + '": ' + JSON.stringify(unmatched) + ' available: ' + JSON.stringify(shown)); } catch (e) {}
+  }
   for (const opt of options) {
     const v = byDisplay.get(String(opt.display).toLowerCase());
     if (!v) {
@@ -1038,8 +1053,9 @@ function expandFromListOptions(c, parentSelectName, parentTabId) {
   const opts = (items || []).map(item => ({
     type: 'single',
     name: selectName + '_' + listName + safePostfix + '_' + item,
-    // Display-only: "{postfix} - {item}" in Title Case. Prompt untouched.
-    display: toTitleCase(postfix ? postfix + ' - ' + item : item),
+    // Display-only: "{postfix} - {item}" in Title Case, edge-trimmed so
+    // author spacing in values never leaks into labels. Prompt untouched.
+    display: toTitleCase((postfix ? String(postfix).trim() + ' - ' : '') + String(item).trim()),
     prompt: String(item).toLowerCase(),
     _fromList: true
   }));
