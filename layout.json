@@ -55,7 +55,7 @@
         {
           "type": "preset",
           "name": "Quick Polish",
-          "mode": "partial",
+          "mode": "additive",
           "children": [
             {
               "type": "set",
@@ -65,8 +65,7 @@
             },
             {
               "type": "set",
-              "name": "Palette Link",
-              "activated": true
+              "name": "Palette Link"
             },
             {
               "type": "set",

@@ -214,7 +214,16 @@ function collectTabNames(tab, tabId) {
       if (type === 'single' || type === 'dual' || type === 'edit' || type === 'edit_link') {
         add(el.name || el.i || el.label);
       } else if (type === 'select') {
-        walk(el.children, el.name || el.i || currentSelectName);
+        // Options are direct children only (selects hold no containers).
+        const selName = el.name || el.i || currentSelectName;
+        for (const opt of (el.children || [])) {
+          const ot = ((opt.type || '') + '').toLowerCase();
+          if (ot === 'single' || ot === 'dual' || ot === 'edit' || ot === 'edit_link') {
+            add(opt.name || opt.i || opt.label);
+          } else if (ot === 'from_list') {
+            for (const o of expandFromListOptions(opt, selName, tabId)) add(o.name);
+          }
+        }
       } else if (type === 'from_list') {
         for (const opt of expandFromListOptions(el, currentSelectName, tabId)) add(opt.name);
       } else if (el.children) {
@@ -252,38 +261,36 @@ function clearTabScope(names) {
 // active (clear-button visibility) and how many (closed summary).
 function selectActiveStats(selectEl, selName, tabId) {
   const stats = { has: false, count: 0 };
-  function walk(elements, currentSelectName) {
-    for (const el of (elements || [])) {
-      const type = ((el.type || '') + '').toLowerCase();
-      if (type === 'single' || type === 'dual' || type === 'edit' || type === 'edit_link') {
-        if (state.activated[el.name || el.i || el.label]) { stats.has = true; stats.count++; }
-      } else if (type === 'select') {
-        walk(el.children, el.name || el.i || currentSelectName);
-      } else if (type === 'from_list') {
-        for (const opt of expandFromListOptions(el, currentSelectName, tabId)) {
-          if (state.activated[opt.name]) { stats.has = true; stats.count++; }
-        }
-      } else if (el.children) {
-        walk(el.children, currentSelectName);
+  // Options are direct children only (selects hold no containers).
+  for (const el of (selectEl.children || [])) {
+    const type = ((el.type || '') + '').toLowerCase();
+    if (type === 'single' || type === 'dual' || type === 'edit' || type === 'edit_link') {
+      if (state.activated[el.name || el.i || el.label]) { stats.has = true; stats.count++; }
+    } else if (type === 'from_list') {
+      for (const opt of expandFromListOptions(el, selName, tabId)) {
+        if (state.activated[opt.name]) { stats.has = true; stats.count++; }
       }
     }
   }
-  walk(selectEl.children, selName);
   return stats;
 }
 
 // ---------- presets ----------
-// A preset holds set children; each set mirrors the applicable params of one
-// target entry (matched by name), plus an explicit activated flag (default
-// true when absent). Select sets hold value children addressed by display
-// label (case-insensitive), each carrying single-like params + activated.
-// Modes: global (whole layout, unmentioned entries fully cleared), partial
-// (only mentioned entries; provided params applied, rest cleared to type
-// defaults), additive (only provided params written; explicit
-// activated:false switches off without touching params).
+// A preset holds set children. Each set mirrors the applicable params of one
+// target entry (matched by name). `activated` is lazy: an explicitly listed
+// target is selected by default; only an explicit `activated: false` opts out.
+// Select sets hold value children addressed by display label
+// (case-insensitive); the children list fully specifies the select, so every
+// unlisted option is deactivated (values restored in global, left intact in
+// additive). `activated` on a select set itself is ignored (selects are
+// containers, not toggleable entries).
+// Modes: global (whole layout; unmentioned entries fully cleared) and
+// additive (only listed entries are touched; unlisted select options still
+// deactivate, but their values are left intact). An omitted mode defaults to
+// additive.
 // Value prompt text is excluded from presets entirely (it is derived from
-// the option); global/partial restores the initial prompt instead of
-// blanking it. Standalone singles/duals still clear to blank.
+// the option); global restores the initial prompt instead of blanking it.
+// Standalone singles/duals still clear to blank.
 // Type defaults (NOT layout defaults) are used whenever params are cleared.
 
 function scalarMirror(type) {
@@ -299,55 +306,64 @@ function clearScalarState(base, mirror) {
 }
 
 function applyScalarSet(base, setEl, mirror, clearRest) {
-  const explicitOff = setEl.activated != null && !setEl.activated;
   for (const [k, suffix, def] of mirror) {
     if (setEl[k] != null) state.values[base + suffix] = setEl[k];
     else if (clearRest) state.values[base + suffix] = def;
   }
-  state.activated[base] = !explicitOff;
+  // `activated` is lazy: a listed target selects unless it writes false.
+  state.activated[base] = setEl.activated !== false;
 }
 
+// Options inside a select may be any scalar entry type (single, dual, edit,
+// edit_link) or a from_list expansion. Selects hold no containers, so only
+// these direct children are ever addressed by preset values.
 function collectSelectOptions(selectEl, selName, tabId) {
   const opts = [];
   for (const ch of (selectEl.children || [])) {
     const t = ((ch.type || '') + '').toLowerCase();
-    if (t === 'single') {
+    if (t === 'from_list') {
+      for (const o of expandFromListOptions(ch, selName, tabId)) {
+        opts.push({ type: 'single', stateName: o.name, display: o.display, initialPrompt: o.prompt ?? '' });
+      }
+    } else if (t === 'single' || t === 'dual' || t === 'edit' || t === 'edit_link') {
       const n = ch.name || ch.i || ch.label;
-      if (n) opts.push({ stateName: n, display: n, initialPrompt: ch.prompt ?? '' });
-    } else if (t === 'from_list') {
-      for (const o of expandFromListOptions(ch, selName, tabId)) opts.push({ stateName: o.name, display: o.display, initialPrompt: o.prompt ?? '' });
+      if (n) opts.push({ type: t, stateName: n, display: n, initialPrompt: ch.prompt ?? '' });
     }
   }
   return opts;
+}
+
+// Preset-writable params for a select option, by type (value mirrors set).
+// single/from_list prompt text is derived from the option, so it is restored
+// separately and excluded here; edit_link has no writable params (only
+// activation, which follows the linked source).
+function optionMirror(opt) {
+  if (opt.type === 'single') return [['emphasis', '_emphasis', 1], ['is_negative', '_is_negative', false]];
+  return scalarMirror(opt.type);
 }
 
 function clearOptionState(opt) {
   state.activated[opt.stateName] = false;
   // Restores the initial prompt (never blank): presets must not corrupt
   // option text, which is derived from the option itself.
-  state.values[opt.stateName + '_prompt'] = opt.initialPrompt ?? '';
-  state.values[opt.stateName + '_emphasis'] = 1;
-  state.values[opt.stateName + '_is_negative'] = false;
+  if (opt.type === 'single') state.values[opt.stateName + '_prompt'] = opt.initialPrompt ?? '';
+  const mirror = optionMirror(opt);
+  if (mirror) for (const [, suffix, def] of mirror) state.values[opt.stateName + suffix] = def;
 }
 
 function applySelectEntry(selectEl, selName, setEl, tabId, clearRest) {
   const options = collectSelectOptions(selectEl, selName, tabId);
-  // Select-level activated:false, or a value-less set, fully clears all options.
-  const selectOff = !!(setEl && setEl.activated != null && !setEl.activated);
+  // The set's children list is the specification of the select: listed options
+  // are addressed, everything else is deactivated. `activated` on the select
+  // set itself is ignored (selects are containers, not toggleable entries).
   // First value wins per display label (case-insensitive).
   const byDisplay = new Map();
-  if (!selectOff) {
-    for (const ch of ((setEl && setEl.children) || [])) {
-      if ((((ch.type || '') + '').toLowerCase()) !== 'value') continue;
-      const vn = ch.name || ch.i;
-      if (!vn) continue;
-      const lk = String(vn).toLowerCase();
-      if (!byDisplay.has(lk)) byDisplay.set(lk, ch);
-    }
-  }
-  if (selectOff || !byDisplay.size) {
-    for (const opt of options) clearOptionState(opt);
-    return;
+  for (const ch of ((setEl && setEl.children) || [])) {
+    if ((((ch.type || '') + '').toLowerCase()) !== 'value') continue;
+    const vn = ch.name || ch.i;
+    if (!vn) continue;
+    const lk = String(vn).toLowerCase();
+    if (!byDisplay.has(lk)) byDisplay.set(lk, ch);
   }
   const unmatched = [];
   for (const ch of ((setEl && setEl.children) || [])) {
@@ -367,18 +383,24 @@ function applySelectEntry(selectEl, selName, setEl, tabId, clearRest) {
   for (const opt of options) {
     const v = byDisplay.get(String(opt.display).toLowerCase());
     if (!v) {
+      // Unlisted: always deactivated. Values are restored only when the mode
+      // clears the rest (global); additive just deactivates.
       if (clearRest) clearOptionState(opt);
+      else state.activated[opt.stateName] = false;
       continue;
     }
-    const optOff = v.activated != null && !v.activated;
+    // `activated` is lazy: a listed option selects unless it writes false.
     // NOTE: value prompt is excluded by design — presets never rewrite option
-    // text. Global/partial restores the initial prompt; additive leaves it.
-    if (clearRest) state.values[opt.stateName + '_prompt'] = opt.initialPrompt ?? '';
-    if (v.emphasis != null) state.values[opt.stateName + '_emphasis'] = v.emphasis;
-    else if (clearRest) state.values[opt.stateName + '_emphasis'] = 1;
-    if (v.is_negative != null) state.values[opt.stateName + '_is_negative'] = v.is_negative;
-    else if (clearRest) state.values[opt.stateName + '_is_negative'] = false;
-    state.activated[opt.stateName] = !optOff;
+    // text. Global restores the initial prompt; additive leaves it.
+    if (opt.type === 'single' && clearRest) state.values[opt.stateName + '_prompt'] = opt.initialPrompt ?? '';
+    const mirror = optionMirror(opt);
+    if (mirror) {
+      for (const [k, suffix, def] of mirror) {
+        if (v[k] != null) state.values[opt.stateName + suffix] = v[k];
+        else if (clearRest) state.values[opt.stateName + suffix] = def;
+      }
+    }
+    state.activated[opt.stateName] = v.activated !== false;
   }
 }
 
@@ -394,9 +416,9 @@ function findPresetByName(tabs, name) {
 }
 
 function applyPreset(presetEl, tabs) {
-  const rawMode = String(presetEl.mode != null ? presetEl.mode : 'partial').toLowerCase();
-  const mode = rawMode === 'global' ? 'global' : rawMode === 'additive' ? 'additive' : 'partial';
-  const clearRest = mode !== 'additive';
+  const rawMode = String(presetEl.mode != null ? presetEl.mode : 'additive').toLowerCase();
+  const mode = rawMode === 'global' ? 'global' : 'additive';
+  const clearRest = mode === 'global';
   // First set wins per target entry.
   const setMap = {};
   for (const ch of (presetEl.children || [])) {
@@ -439,24 +461,20 @@ function applyPreset(presetEl, tabs) {
         if (set) applyScalarSet(key, set, mirror, clearRest);
         else if (mode === 'global') clearScalarState(key, mirror);
       } else if (type === 'edit_link') {
-        // Only activation control is applicable; other keys are ignored.
+        // Driven by the linked source except activation. `activated` is lazy:
+        // a listed target selects unless it writes false.
         const key = el.name || el.i || el.label;
         if (!key) continue;
         const set = lookup(el);
-        if (set && set.activated != null) state.activated[key] = !!set.activated;
-        else if (mode === 'global' && !set) state.activated[key] = false;
+        if (set) state.activated[key] = set.activated !== false;
+        else if (mode === 'global') state.activated[key] = false;
       } else if (type === 'select') {
+        // Options are direct children only (selects hold no containers).
         const selName = el.name || el.i;
         if (selName) {
           const set = setMap[selName] || null;
           if (set) applySelectEntry(el, selName, set, tabId, clearRest);
           else if (mode === 'global') applySelectEntry(el, selName, null, tabId, true);
-        }
-        // Recurse into nested containers only (direct options handled above).
-        for (const ch of (el.children || [])) {
-          const ct = ((ch.type || '') + '').toLowerCase();
-          if (ct === 'single' || ct === 'from_list' || ct === 'value' || ct === 'set') continue;
-          if (ch.children) walkContents([ch], selName, tabId);
         }
       } else if (type === 'from_list') {
         // Standalone list options: only global touches them (sets can't address them).
@@ -646,6 +664,10 @@ function seedPanelLayoutDefaults(tabs) {
   state.expanded = {};
   function collectActivated(elements) {
     for (const el of elements) {
+      const t = ((el.type || '') + '').toLowerCase();
+      // Preset mappings (set/value) are apply-time instructions, not entries:
+      // their activated flags must never seed the layout defaults.
+      if (t === 'preset' || t === 'set' || t === 'value') continue;
       if (el.activated) {
         const name = el.name || el.i || el.label;
         if (name) state.activated[name] = true;
@@ -656,6 +678,7 @@ function seedPanelLayoutDefaults(tabs) {
   function collectOpen(elements) {
     for (const el of (elements || [])) {
       const t = ((el.type || '') + '').toLowerCase();
+      if (t === 'preset' || t === 'set' || t === 'value') continue;
       const n = el.name || el.i || el.label;
       if (n && (t === 'group' || t === 'accordion' || t === 'dual') && el.open != null) {
         state.expanded[n] = !!el.open;
