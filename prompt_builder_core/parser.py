@@ -18,13 +18,30 @@ def find_layout_file(search_dir: str) -> Optional[str]:
     return None
 
 
+# Simple mtime-keyed cache so repeated evals / layout requests don't re-parse
+# the (rarely changing) layout file on every call.
+_layout_cache: dict = {}
+
 def parse_layout_file(path: str) -> Layout:
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        mtime = None
+    cache_key = (os.path.abspath(path), mtime)
+    cached = _layout_cache.get(cache_key)
+    if cached is not None:
+        return cached
     with open(path, 'r', encoding='utf-8') as f:
         if path.lower().endswith('.json'):
             data = json.load(f) or {}
         else:
             data = yaml.safe_load(f) or {}
-    return _from_dict(data)
+    layout = _from_dict(data)
+    # Drop stale entries for the same path to avoid unbounded growth.
+    for k in [k for k in _layout_cache if k[0] == os.path.abspath(path) and k != cache_key]:
+        del _layout_cache[k]
+    _layout_cache[cache_key] = layout
+    return layout
 
 
 def _from_dict(data: Dict[str, Any]) -> Layout:

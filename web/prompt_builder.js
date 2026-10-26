@@ -509,6 +509,8 @@ let bpbPanelReady = false;
 let bpbDirtyTimer = null;
 let bpbBindSeq = 0;
 let bpbWidgetApplied = false;
+let bpbWidgetValueRaw = null; // last widget value string we applied
+let bpbBoundGraph = null; // tracks which graph object the panel is bound to
 
 function bpbGraphNodeList(graph) {
   // Version-proof, subgraph-aware enumeration from the graph root.
@@ -582,6 +584,12 @@ function chooseBindingForGraph(graph) {
 function rebindIfChanged() {
   try {
     if (!bpbPanelReady || !app.graph) return;
+    // Detect a workflow/tab switch that swapped the underlying graph object,
+    // even when node ids happen to collide with the previously bound one.
+    if (bpbBoundGraph !== app.graph) {
+      bpbBoundNodeId = null;
+      bpbBoundGraph = app.graph;
+    }
     const id = chooseBindingForGraph(app.graph);
     if (id !== bpbBoundNodeId) bindPanelToNode(id);
   } catch (e) {}
@@ -614,6 +622,8 @@ function ensurePanelPainted() {
 // then refresh the previews so the footer can never show stale content.
 function syncPanelToDom() {
   try {
+    rebindIfChanged();
+    applyWidgetStateIfChanged();
     refreshPanelBinding();
     ensurePanelPainted();
     evalState();
@@ -662,6 +672,7 @@ function seedPanelLayoutDefaults(tabs) {
   state.values = {};
   state.activated = {};
   state.expanded = {};
+  state.active_tabs = {};
   function collectActivated(elements) {
     for (const el of elements) {
       const t = ((el.type || '') + '').toLowerCase();
@@ -700,15 +711,48 @@ function applyBoundWidgetState() {
   const widget = bpbGetWidget(node);
   if (!widget) return false;
   let d = null;
+  let raw = null;
   try {
-    const raw = widget.value;
+    raw = widget.value;
     d = (typeof raw === 'string') ? JSON.parse(raw) : raw;
   } catch (e) { return false; }
   if (!d || typeof d !== 'object' || (!('values' in d) && !('activated' in d) && !('expanded' in d))) return false;
   if (d.values && typeof d.values === 'object') state.values = { ...d.values };
   if (d.activated && typeof d.activated === 'object') state.activated = { ...d.activated };
   if (d.expanded && typeof d.expanded === 'object') state.expanded = { ...d.expanded };
+  try { bpbWidgetValueRaw = (typeof raw === 'string') ? raw : JSON.stringify(raw); } catch (e) {}
   return true;
+}
+
+// Re-apply saved widget state if the underlying widget value has changed
+// since we last applied (e.g. ComfyUI restored it after our first attempt).
+// Returns true when state was (re)applied.
+function applyWidgetStateIfChanged() {
+  try {
+    if (bpbBoundNodeId == null || !app.graph) return false;
+    let node = null;
+    try { node = bpbFindNodeById(app.graph, bpbBoundNodeId); } catch (e) { return false; }
+    const widget = bpbGetWidget(node);
+    if (!widget) return false;
+    const raw = widget.value;
+    const rawStr = (typeof raw === 'string') ? raw : (raw == null ? '' : JSON.stringify(raw));
+    if (rawStr && rawStr === bpbWidgetValueRaw) return false;
+    // If the widget still holds the default/empty state, don't clobber.
+    let d = null;
+    try { d = (typeof raw === 'string') ? JSON.parse(raw) : raw; } catch (e) { return false; }
+    if (!d || typeof d !== 'object' || (!('values' in d) && !('activated' in d) && !('expanded' in d))) return false;
+    const previouslyApplied = bpbWidgetApplied;
+    bpbWidgetApplied = false;
+    const applied = applyBoundWidgetState();
+    if (applied) {
+      const layout = window.__prompt_builder_layout;
+      if (layout && layout.tabs) renderTabs(layout.tabs);
+      evalState();
+    } else {
+      bpbWidgetApplied = previouslyApplied;
+    }
+    return applied;
+  } catch (e) { return false; }
 }
 
 function refreshPanelBinding() {
@@ -740,6 +784,7 @@ function refreshPanelBinding() {
 function bindPanelToNode(nodeId, preloaded) {
   const mySeq = ++bpbBindSeq;
   bpbBoundNodeId = nodeId;
+  bpbBoundGraph = (typeof app !== 'undefined' && app) ? app.graph : bpbBoundGraph;
   try {
     if (app.graph) {
       if (nodeId == null) bpbGraphBinding.delete(app.graph);
@@ -749,7 +794,20 @@ function bindPanelToNode(nodeId, preloaded) {
   refreshPanelBinding();
   const tabs = (window.__prompt_builder_layout && window.__prompt_builder_layout.tabs) || (preloaded && preloaded.tabs) || [];
   seedPanelLayoutDefaults(tabs);
+  // Capture the layout's initial (default) state for Reset All / tab resets,
+  // before any saved widget state is applied on top.
+  try {
+    initialLayoutState = {
+      values: { ...state.values },
+      activated: { ...state.activated },
+      expanded: { ...state.expanded },
+      active_tabs: { ...state.active_tabs }
+    };
+  } catch (e) {}
   bpbWidgetApplied = applyBoundWidgetState();
+  // Kick the preview evaluation as soon as saved state is applied, without
+  // waiting for the layout fetch below.
+  try { if (bpbWidgetApplied) evalState(); } catch (e) {}
   const finish = (layout) => {
     // Drop stale renders: only the latest bind may paint.
     if (mySeq !== bpbBindSeq) return;
@@ -1348,6 +1406,11 @@ app.registerExtension({
       if (bpbPanelReady && bpbBoundNodeId == null) bindPanelToNode(node.id);
     } catch (e) {}
   },
+  async beforeConfigureGraph() {
+    // Reset the "widget applied" gate so a freshly loaded workflow (including
+    // ones loaded from image metadata) re-applies its saved panel state.
+    try { bpbWidgetApplied = false; } catch (e) {}
+  },
   async afterConfigureGraph() {
     // Fires on workflow load and workflow-tab switches: rebind only when the
     // resolved node differs, so repeated events can't repaint a settled
@@ -1355,22 +1418,22 @@ app.registerExtension({
     // empty graph, widget values not yet applied) and repaint misses.
     try {
       if (!bpbPanelReady || !app.graph) return;
-      rebindIfChanged();
-      setTimeout(() => {
+      // On a graph load (including workflows loaded from image metadata),
+      // force a full rebind so the panel re-seeds defaults and re-applies
+      // the bound node's saved widget state instead of staying stuck.
+      bpbBoundGraph = app.graph;
+      bpbBoundNodeId = null;
+      bindPanelToNode(chooseBindingForGraph(app.graph));
+      const retry = () => {
         try {
           if (!bpbPanelReady || !app.graph) return;
           rebindIfChanged();
-          // Widget values may not have been applied at bind time; if the
-          // bind showed defaults, retry once now (panel edits stream into
-          // the widget, so re-applying can only restore saved content).
-          if (!bpbWidgetApplied && applyBoundWidgetState()) {
-            const layout = window.__prompt_builder_layout;
-            if (layout && layout.tabs) renderTabs(layout.tabs);
-            evalState();
-          }
+          applyWidgetStateIfChanged();
           ensurePanelPainted();
         } catch (e) {}
-      }, 400);
+      };
+      setTimeout(retry, 100);
+      setTimeout(retry, 400);
     } catch (e) {}
   },
   async setup() {
@@ -1430,7 +1493,7 @@ app.registerExtension({
         if (bpbBoundNodeId != null) {
           const node = bpbFindNodeById(app.graph, bpbBoundNodeId);
           if (!node || node.type !== 'PromptBuilderNode') rebindIfChanged();
-          else ensurePanelPainted();
+          else { applyWidgetStateIfChanged(); ensurePanelPainted(); }
         } else {
           rebindIfChanged();
         }
