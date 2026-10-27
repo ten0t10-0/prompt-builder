@@ -665,6 +665,9 @@ function writeWidgetFromPanel() {
   try {
     if (widget.value !== json) widget.value = json; // setter routes via setValue + callback(dirty)
   } catch (e) {}
+  // Remember that we wrote this value ourselves so the polling restoration
+  // check doesn't mistake our own edits for an external ComfyUI restore.
+  try { bpbWidgetValueRaw = json; } catch (e) {}
   try { if (node.setDirtyCanvas) node.setDirtyCanvas(true, true); } catch (e) {}
 }
 
