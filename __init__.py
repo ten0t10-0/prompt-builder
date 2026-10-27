@@ -62,7 +62,7 @@ class PromptBuilderNode:
 
     def __init__(self):
         self._state = state_mod.UiState()
-        # layout.json wins when both formats exist, else layout.yaml/.yml.
+        # layout.yaml/.yml wins when both formats exist, else layout.json.
         self._layout_path = (
             parser.find_layout_file(os.path.dirname(__file__))
             or os.path.join(os.path.dirname(__file__), 'layout.yaml')

@@ -7,7 +7,7 @@ import yaml
 
 
 # Source discovery order when both formats exist.
-LAYOUT_FILENAMES = ('layout.json', 'layout.yaml', 'layout.yml')
+LAYOUT_FILENAMES = ('layout.yaml', 'layout.yml', 'layout.json')
 
 
 def find_layout_file(search_dir: str) -> Optional[str]:
