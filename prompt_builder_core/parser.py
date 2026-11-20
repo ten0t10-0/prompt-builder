@@ -24,18 +24,27 @@ def find_layout_file(search_dir: str) -> Optional[str]:
 _layout_cache: dict = {}
 
 def _coerce_xml_value(v: str) -> Any:
-    v = v.strip()
-    if v.lower() in ('true', 'yes', 'on'):
+    s = v.strip()
+    if s.lower() in ('true', 'yes', 'on'):
         return True
-    if v.lower() in ('false', 'no', 'off'):
+    if s.lower() in ('false', 'no', 'off'):
         return False
+    # Only coerce when the whole (stripped) value is numeric, so that
+    # intentional leading/trailing spaces in text prompts/postfixes survive.
     try:
-        return int(v)
-    except ValueError:
+        if s == str(int(s)):
+            return int(s)
+    except (ValueError, TypeError):
         pass
     try:
-        return float(v)
-    except ValueError:
+        # Avoid coercing strings like "1 2" or "1,2"
+        if ' ' not in s and ',' not in s:
+            f = float(s)
+            # Keep as int when there is no decimal point
+            if '.' not in s and 'e' not in s.lower():
+                return int(f) if f.is_integer() else f
+            return f
+    except (ValueError, TypeError):
         pass
     return v
 
@@ -45,23 +54,25 @@ def _xml_list_items(el: ET.Element) -> List[Any]:
     # Child <item> elements
     for child in el:
         if child.tag.lower() in ('item', 'value', 'entry'):
-            text = (child.text or '').strip()
-            if text:
+            text = child.text if child.text is not None else ''
+            if text.strip():
+                # Preserve intentional leading/trailing spaces in single-line
+                # values, but drop surrounding indentation from multi-line ones.
+                if '\n' in text:
+                    text = text.strip()
                 items.append(_coerce_xml_value(text))
             # allow nested attributes? fall back to 'value' attr
-            if not text and 'value' in child.attrib:
+            elif 'value' in child.attrib:
                 items.append(_coerce_xml_value(child.attrib['value']))
     # Comma-separated items attribute
     if not items and 'items' in el.attrib:
         for part in el.attrib['items'].split(','):
-            part = part.strip()
-            if part:
+            if part.strip():
                 items.append(_coerce_xml_value(part))
     # Fallback: split text content by lines/commas
     if not items and (el.text or '').strip():
         for part in (el.text or '').replace(',', '\n').splitlines():
-            part = part.strip()
-            if part:
+            if part.strip():
                 items.append(_coerce_xml_value(part))
     return items
 

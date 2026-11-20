@@ -20,10 +20,22 @@ class PromptElement:
         ptype = self.data.get('type', 'single')
         if ptype == 'single':
             prompt = self.data.get('prompt', '')
+            if prompt is None:
+                prompt = ''
+            else:
+                prompt = str(prompt)
             emphasis = self.data.get('emphasis', 1) or 1
             neg = self.data.get('is_negative', False)
             prefix = self.data.get('prefix', '') or ''
+            if prefix is not None:
+                prefix = str(prefix)
+            else:
+                prefix = ''
             postfix = self.data.get('postfix', '') or ''
+            if postfix is not None:
+                postfix = str(postfix)
+            else:
+                postfix = ''
             if prompt:
                 # Affixes concatenate verbatim: spacing lives in the values.
                 if prefix:
@@ -40,11 +52,19 @@ class PromptElement:
             return PromptPair(prompt, '')
         elif ptype == 'dual':
             pp = self.data.get('prompt_pos', '')
+            if pp is None: pp = ''
+            else: pp = str(pp)
             pn = self.data.get('prompt_neg', '')
+            if pn is None: pn = ''
+            else: pn = str(pn)
             sp = self.data.get('emphasis_pos', 1) or 1
             sn = self.data.get('emphasis_neg', 1) or 1
             prefix = self.data.get('prefix', '') or ''
+            if prefix is not None: prefix = str(prefix)
+            else: prefix = ''
             postfix = self.data.get('postfix', '') or ''
+            if postfix is not None: postfix = str(postfix)
+            else: postfix = ''
             if pp:
                 if prefix:
                     pp = prefix + pp
@@ -67,7 +87,11 @@ class PromptElement:
             return PromptPair(pp, pn)
         elif ptype == 'edit' or ptype == 'edit_link':
             pa = self.data.get('prompt_a', '')
+            if pa is None: pa = ''
+            else: pa = str(pa)
             pb = self.data.get('prompt_b', '')
+            if pb is None: pb = ''
+            else: pb = str(pb)
             e_raw = self.data.get('edit', 0.5)
             try:
                 e = float(e_raw) if e_raw is not None else 0.5
@@ -75,7 +99,11 @@ class PromptElement:
                 e = 0.5
             neg = self.data.get('is_negative', False)
             prefix = self.data.get('prefix', '') or ''
+            if prefix is not None: prefix = str(prefix)
+            else: prefix = ''
             postfix = self.data.get('postfix', '') or ''
+            if postfix is not None: postfix = str(postfix)
+            else: postfix = ''
             if pa:
                 if prefix:
                     pa = prefix + pa
@@ -119,9 +147,9 @@ class PromptEvaluator:
             try:
                 pr = p.build_prompt()
                 if pr.pos:
-                    pos_parts.append(pr.pos)
+                    pos_parts.append(str(pr.pos))
                 if pr.neg:
-                    neg_parts.append(pr.neg)
+                    neg_parts.append(str(pr.neg))
             except Exception:
                 continue
         return PromptPair(', '.join(pos_parts), ', '.join(neg_parts))
