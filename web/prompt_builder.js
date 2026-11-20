@@ -857,6 +857,18 @@ function renderTabs(tabs, parentId = null) {
       scheduleEval();
     };
   });
+  // Main tab bar only: stretch tabs to fill the row while keeping each
+  // tab's width proportional to its intrinsic (label) width. flex-grow is
+  // set to the measured width so extra space is distributed by ratio.
+  if (isRoot) {
+    try {
+      const btns = el.querySelectorAll('button.bpb-tab-btn');
+      btns.forEach(b => {
+        const w = Math.max(1, b.offsetWidth || b.scrollWidth || 1);
+        b.style.flex = w + ' 1 auto';
+      });
+    } catch (e) {}
+  }
   // Render initial content
   renderNestedContent(tabs, tabId);
 }

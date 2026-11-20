@@ -133,6 +133,20 @@
     margin-bottom: 4px;
 }
 
+/* Main tab bar only: stretch tabs to fill the available width. */
+#bpb-tabs .bpb-tabbar {
+    flex-wrap: nowrap;
+}
+
+#b-prompt-builder-panel #bpb-tabs .bpb-tab-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 #b-prompt-builder-panel .bpb-tab-btn {
     padding: 2px 6px;
     font-size: 13px;
